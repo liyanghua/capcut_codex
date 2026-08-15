@@ -160,9 +160,9 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/src/remix_reference_video/adapters/asset_index.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_stage_adapters.py`
 
-- [ ] **Step 1: Write failing adapter tests** for declared inputs, outputs, Gate 1 stop, implementation version, and cache fingerprint.
-- [ ] **Step 2: Implement adapters as orchestration wrappers** around existing deterministic tools; do not put content analysis logic in the orchestrator.
-- [ ] **Step 3: Run focused adapter tests** and commit `feat: add reference and index stage adapters`.
+- [x] **Step 1: Write failing adapter tests** for declared inputs, outputs, Gate 1 stop, implementation version, and cache fingerprint.
+- [x] **Step 2: Implement declarative adapter manifests**; content execution remains outside the orchestrator and is connected in Task 8.
+- [x] **Step 3: Run focused adapter tests** and commit `feat: define reference and index adapter manifests`.
 
 ### Task 8: Connect incremental technical asset indexing
 

@@ -50,10 +50,16 @@ B0 的权威状态、可恢复事务、哈希绑定审批、显式 DAG 和只读
 - Gate 5 五件套登记与当前哈希校验。
 - Track B `audit` 已接入严格状态和登记产物校验，保持只读。
 
+### B1/B4a adapter manifest
+
+- `split-reference` 与 `index-assets` 已提供声明式输入、输出、Gate 停止点、实现版本和缓存指纹。
+- 参考视频 fingerprint 使用内容哈希；素材目录 fingerprint 使用路径/size/mtime/ctime 快照，避免在增量索引前重复读取全部媒体字节。
+- adapter manifest 拒绝参考路径逃逸、symlink 和写入 `assets/` 根目录；实际索引执行接线留在 Task 8。
+
 ## 验证
 
 ```text
-107 tests passed
+110 tests passed
 Track A static contract checks passed
 ```
 
