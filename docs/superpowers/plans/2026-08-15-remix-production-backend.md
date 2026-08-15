@@ -56,10 +56,10 @@ Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -m unittest .ag
 
 Expected: FAIL because the new fields and substate validation are not implemented.
 
-- [ ] **Step 3: Implement minimal typed contract changes** without changing V1 schema behavior. Preserve V2 envelope fields and reject unknown/invalid Gate states.
-- [ ] **Step 4: Add migration-safe defaults** for existing alpha pilot read-only inspection: missing runtime fields remain explicit `null`/unsupported, never silently become `track-b-production`.
-- [ ] **Step 5: Run the focused tests again** and verify PASS.
-- [ ] **Step 6: Commit** `feat: define track b state and gate substate contracts`.
+- [x] **Step 3: Implement minimal typed contract changes** without changing V1 schema behavior. Preserve V2 envelope fields and reject unknown/invalid Gate states.
+- [x] **Step 4: Add migration-safe defaults** for existing alpha pilot read-only inspection: missing runtime fields remain explicit `null`/unsupported, never silently become `track-b-production`.
+- [x] **Step 5: Run the focused tests again** and verify PASS.
+- [x] **Step 6: Commit** `feat: define track b state and gate substate contracts`.
 
 ### Task 2: Implement transaction journal, atomic state writes, events, and metrics
 
@@ -71,15 +71,15 @@ Expected: FAIL because the new fields and substate validation are not implemente
 
 - [ ] **Step 1: Write failing tests** for prepared/committed transactions, state-before-event recovery, event-before-metrics recovery, orphan artifact cleanup, idempotent transaction replay, and revision conflict rejection.
 - [ ] **Step 2: Run the focused tests** and confirm the failures describe missing reconciliation behavior.
-- [ ] **Step 3: Implement** `.transactions/<transaction_id>.json`, expected-revision checks, staging manifest, immutable versioned artifact references, atomic state replacement, idempotent event append, and reconciliation rules from the design spec.
-- [ ] **Step 4: Ensure metrics gaps become `measurement_status=partial`**, never zero seconds and never a Gate approval change.
-- [ ] **Step 5: Run tests with `-W error::ResourceWarning`**.
+- [x] **Step 3: Implement** `.transactions/<transaction_id>.json`, expected-revision checks, staging manifest, immutable versioned artifact references, atomic state replacement, idempotent event append, and reconciliation rules from the design spec.
+- [x] **Step 4: Ensure metrics gaps become `measurement_status=partial`**, never zero seconds and never a Gate approval change.
+- [x] **Step 5: Run tests with `-W error::ResourceWarning`**.
 
 Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -W error::ResourceWarning -m unittest .agents/skills/remix-reference-video/tests/test_transactions.py .agents/skills/remix-reference-video/tests/test_storage.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit** `feat: add recoverable task transactions and audit events`.
+- [x] **Step 6: Commit** `feat: add recoverable task transactions and audit events`.
 
 ### Task 3: Add Approval Service and `approve-gate`
 
@@ -91,16 +91,16 @@ Expected: PASS.
 - Test: `.agents/skills/remix-reference-video/tests/test_cli.py`
 
 - [ ] **Step 1: Write failing tests** for trusted-server approval timestamps, review-package hash mismatch, stale revision, out-of-order timestamps, incomplete Gate 3/4 substate, cross-task approval rejection, and idempotent repeated approval.
-- [ ] **Step 2: Implement** `approve-gate --task-dir --gate --review-package-hash --decision-file --actor` as the only state-writing approval command. The decision file must validate against a schema with enumerated `decision`, `scope_type`, `scope_ids`, and strategy fields; free-form notes are advisory only and cannot encode approval policy. Actor identity is required and is recorded by the trusted service.
-- [ ] **Step 3: Implement the Gate 4 pre-generation transaction** that promotes the candidate plus TTS settings to immutable `approved_production_script.json` before setting `gate4_pre_generation=approved`.
-- [ ] **Step 4: Add structured exit codes** for invalid command, awaiting Gate, blocked policy, audit failure, and successful approval.
-- [ ] **Step 5: Run focused CLI and approval tests**.
+- [x] **Step 2: Implement** `approve-gate --task-dir --gate --review-package-hash --decision-file --actor` as the only state-writing approval command. The decision file must validate against a schema with enumerated `decision`, `scope_type`, `scope_ids`, and strategy fields; free-form notes are advisory only and cannot encode approval policy. Actor identity is required and is recorded by the trusted service.
+- [x] **Step 3: Implement the Gate 4 pre-generation transaction** that promotes the candidate plus TTS settings to immutable `approved_production_script.json` before setting `gate4_pre_generation=approved`.
+- [x] **Step 4: Add structured exit codes** for invalid command, awaiting Gate, blocked policy, audit failure, and successful approval.
+- [x] **Step 5: Run focused CLI and approval tests**.
 
 Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -W error::ResourceWarning -m unittest .agents/skills/remix-reference-video/tests/test_approvals.py .agents/skills/remix-reference-video/tests/test_cli.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit** `feat: add hash-bound gate approval service`.
+- [x] **Step 6: Commit** `feat: add hash-bound gate approval service`.
 
 ### Task 4: Build the explicit DAG orchestrator
 
@@ -112,8 +112,8 @@ Expected: PASS.
 - Modify: `.agents/skills/remix-reference-video/tests/test_runner.py`
 
 - [ ] **Step 1: Write failing tests** for Gate stop, exact next-node selection, parallel-safe read-only nodes, blocked/stale propagation, attempt IDs, and no self-approval.
-- [ ] **Step 2: Define adapter interface** with `required_inputs`, `required_gates`, `declared_outputs`, `cache_fingerprint`, and `execute`.
-- [ ] **Step 3: Implement DAG selection** for the normative sequence in the design spec, including Gate 3 and Gate 4 summaries.
+- [x] **Step 2: Define adapter interface** with `required_inputs`, `required_gates`, `declared_outputs`, `cache_fingerprint`, and `execute`.
+- [x] **Step 3: Implement DAG selection** for the normative sequence in the design spec, including Gate 3 and Gate 4 summaries.
 - [ ] **Step 4: Implement `run`, `stage`, `resume`, `status`, and `audit` through the orchestrator**, preserving Fast Path v0 fixture behavior.
 - [ ] **Step 5: Run all B0 tests**.
 
@@ -131,10 +131,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/tests/test_artifact_validator.py`
 
 - [ ] **Step 1: Write failing tests** for envelope/shape, artifact hash references, path allowlist, symlink escape, Gate 3 broad-range containment, timeline containment, and Gate 5 output bundle.
-- [ ] **Step 2: Implement validator results as structured data**; validators must not mutate state or approve a Gate.
-- [ ] **Step 3: Wire validation into staging promotion and `audit`**.
-- [ ] **Step 4: Run the focused validator and all regression tests**.
-- [ ] **Step 5: Commit** `feat: validate complete remix artifacts before promotion`.
+- [x] **Step 2: Implement validator results as structured data**; validators must not mutate state or approve a Gate.
+- [ ] **Step 3: Wire validation into staging promotion and `audit`**. (`audit` complete; staging promotion integration remains.)
+- [x] **Step 4: Run the focused validator and all regression tests**.
+- [x] **Step 5: Commit** `feat: validate complete remix artifacts before promotion`.
 
 ### Task 6: Add B0 isolated fixture and prove no runtime activation before G-A (Pre-G-A)
 
