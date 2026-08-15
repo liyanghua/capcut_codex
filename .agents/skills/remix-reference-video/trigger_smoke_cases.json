@@ -1,0 +1,21 @@
+{
+  "fixture_schema_version": "1.0.0",
+  "skill": "remix-reference-video",
+  "skill_version": "2.0.0-alpha.1",
+  "contract_version": "2.0.0-alpha.1",
+  "status": "manual_smoke_fixture",
+  "cases": [
+    {"id": "trigger-01-complete-reference-remix", "expect": "should_trigger", "prompt": "把完整参考视频换成自有素材并生成审核预览"},
+    {"id": "trigger-02-shot-matching", "expect": "should_trigger", "prompt": "读取参考视频和 assets 做镜头素材匹配"},
+    {"id": "trigger-03-voice-captions", "expect": "should_trigger", "prompt": "为已批准片段生成配音和独立字幕"},
+    {"id": "trigger-04-jianying-manifest", "expect": "should_trigger", "prompt": "生成剪映导入清单，不要伪造可编辑草稿"},
+    {"id": "trigger-05-reference-split-only", "expect": "should_trigger", "prompt": "拆解参考视频并提取关键帧和音轨"},
+    {"id": "trigger-06-material-gap-review", "expect": "should_trigger", "prompt": "检查哪些镜头缺素材并给运营审核"},
+    {"id": "near-01-product-copy", "expect": "near_neighbor", "prompt": "写产品详情页文案"},
+    {"id": "near-02-generic-video-edit", "expect": "near_neighbor", "prompt": "剪辑一段没有参考片的产品视频"},
+    {"id": "near-03-audio-only", "expect": "should_not_trigger", "prompt": "只把一段文字转成音频"},
+    {"id": "near-04-image-resize", "expect": "should_not_trigger", "prompt": "把一张图片裁成 9:16"},
+    {"id": "near-05-json-review", "expect": "should_not_trigger", "prompt": "检查一个普通 JSON 的格式"},
+    {"id": "near-06-general-ffmpeg", "expect": "should_not_trigger", "prompt": "把两个视频用 FFmpeg 拼接"}
+  ]
+}

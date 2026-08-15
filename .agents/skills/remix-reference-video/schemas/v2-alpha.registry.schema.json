@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:schema:v2-alpha-envelope",
+  "title": "Reference Video Remix V2 Alpha Artifact Envelope",
+  "description": "Track A validates the common metadata envelope and registry only. Full artifact shapes are deferred to Track B.",
+  "registry_version": "1.0.0",
+  "x-skill": {
+    "name": "remix-reference-video",
+    "version": "2.0.0-alpha.1"
+  },
+  "x-contracts": {
+    "legacy_v1": {
+      "contract_version": "1.0.0",
+      "accepted_schema_versions": ["1.0"],
+      "read_only": true,
+      "migration_required": true
+    },
+    "v2_alpha": {
+      "contract_version": "2.0.0-alpha.1",
+      "default_artifact_schema_version": "1.0.0",
+      "full_shape_validator": "deferred_to_track_b"
+    }
+  },
+  "type": "object",
+  "required": [
+    "artifact_type",
+    "schema_id",
+    "schema_version",
+    "contract_version",
+    "skill_version"
+  ],
+  "properties": {
+    "artifact_type": {
+      "type": "string",
+      "enum": [
+        "project_brief",
+        "pipeline_state",
+        "recipe",
+        "shot_blueprint",
+        "content_baseline",
+        "mutation_plan",
+        "coverage_precheck",
+        "coverage_report",
+        "asset_profiles",
+        "matches",
+        "fragment_plan",
+        "script_evidence_matrix",
+        "production_script_candidate",
+        "approved_production_script",
+        "material_manifest",
+        "voice_script",
+        "voice_manifest",
+        "duration_report",
+        "voice_qa_report",
+        "reconstruction_timeline",
+        "match_validation_report",
+        "material_validation_report",
+        "final_validation_report",
+        "render_report",
+        "jianying_import_manifest"
+      ]
+    },
+    "schema_id": {
+      "type": "string",
+      "pattern": "^urn:capcut:remix-reference-video:artifact:[a-z0-9-]+$"
+    },
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"}
+  },
+  "oneOf": [
+    {"properties":{"artifact_type":{"const":"project_brief"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:project-brief"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"pipeline_state"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:pipeline-state"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"recipe"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:recipe"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"shot_blueprint"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:shot-blueprint"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"content_baseline"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:content-baseline"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"mutation_plan"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:mutation-plan"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"coverage_precheck"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:coverage-precheck"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"coverage_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:coverage-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"asset_profiles"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:asset-profiles"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"matches"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:matches"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"fragment_plan"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:fragment-plan"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"script_evidence_matrix"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:script-evidence-matrix"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"production_script_candidate"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:production-script-candidate"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"approved_production_script"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:approved-production-script"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"material_manifest"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:material-manifest"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"voice_script"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:voice-script"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"voice_manifest"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:voice-manifest"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"duration_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:duration-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"voice_qa_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:voice-qa-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"reconstruction_timeline"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:reconstruction-timeline"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"match_validation_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:match-validation-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"material_validation_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:material-validation-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"final_validation_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:final-validation-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"render_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:render-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"jianying_import_manifest"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest"}},"required":["artifact_type","schema_id"]}
+  ],
+  "additionalProperties": true,
+  "x-artifacts": [
+    {"artifact_type":"project_brief","schema_id":"urn:capcut:remix-reference-video:artifact:project-brief","path":"project_brief.yaml","format":"yaml","status":"active","track":"A"},
+    {"artifact_type":"pipeline_state","schema_id":"urn:capcut:remix-reference-video:artifact:pipeline-state","path":"pipeline_state.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"recipe","schema_id":"urn:capcut:remix-reference-video:artifact:recipe","path":"recipe.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"shot_blueprint","schema_id":"urn:capcut:remix-reference-video:artifact:shot-blueprint","path":"shot_blueprint.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"content_baseline","schema_id":"urn:capcut:remix-reference-video:artifact:content-baseline","path":"content_baseline.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"mutation_plan","schema_id":"urn:capcut:remix-reference-video:artifact:mutation-plan","path":"mutation_plan.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"coverage_precheck","schema_id":"urn:capcut:remix-reference-video:artifact:coverage-precheck","path":"coverage_precheck.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"coverage_report","schema_id":"urn:capcut:remix-reference-video:artifact:coverage-report","path":"coverage_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"asset_profiles","schema_id":"urn:capcut:remix-reference-video:artifact:asset-profiles","path":"asset_profiles.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"matches","schema_id":"urn:capcut:remix-reference-video:artifact:matches","path":"matches.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"fragment_plan","schema_id":"urn:capcut:remix-reference-video:artifact:fragment-plan","path":"fragment_plan.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"script_evidence_matrix","schema_id":"urn:capcut:remix-reference-video:artifact:script-evidence-matrix","path":"script_evidence_matrix.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"production_script_candidate","schema_id":"urn:capcut:remix-reference-video:artifact:production-script-candidate","path":"production_script_candidate.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"approved_production_script","schema_id":"urn:capcut:remix-reference-video:artifact:approved-production-script","path":"approved_production_script.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"material_manifest","schema_id":"urn:capcut:remix-reference-video:artifact:material-manifest","path":"material_manifest.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"voice_script","schema_id":"urn:capcut:remix-reference-video:artifact:voice-script","path":"voice/voice_script.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"voice_manifest","schema_id":"urn:capcut:remix-reference-video:artifact:voice-manifest","path":"voice/voice_manifest.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"duration_report","schema_id":"urn:capcut:remix-reference-video:artifact:duration-report","path":"voice/duration_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"voice_qa_report","schema_id":"urn:capcut:remix-reference-video:artifact:voice-qa-report","path":"voice/voice_qa_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"reconstruction_timeline","schema_id":"urn:capcut:remix-reference-video:artifact:reconstruction-timeline","path":"reconstruction_timeline.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"match_validation_report","schema_id":"urn:capcut:remix-reference-video:artifact:match-validation-report","path":"match_validation_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"material_validation_report","schema_id":"urn:capcut:remix-reference-video:artifact:material-validation-report","path":"material_validation_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"final_validation_report","schema_id":"urn:capcut:remix-reference-video:artifact:final-validation-report","path":"final_validation_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"render_report","schema_id":"urn:capcut:remix-reference-video:artifact:render-report","path":"render_report.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"jianying_import_manifest","schema_id":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest","path":"jianying_import_manifest.json","format":"json","status":"active","track":"A"}
+  ],
+  "x-planned-artifacts": [
+    {"artifact_type":"quality_scorecard","status":"planned_track_c","activation":"after_g_b"}
+  ],
+  "x-non-task-resources": {
+    "manifest": {"path":"manifest.json","format":"json","version_field":"manifest_schema_version"},
+    "trigger_fixture": {"path":"trigger_smoke_cases.json","format":"json","version_field":"fixture_schema_version"}
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "decision": "approved",
+  "scope_type": "artifact_set",
+  "scope_ids": ["recipe.json"],
+  "directives": {}
+}

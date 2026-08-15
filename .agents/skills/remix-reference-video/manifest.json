@@ -1,0 +1,44 @@
+{
+  "name": "remix-reference-video",
+  "version": "2.0.0-alpha.1",
+  "manifest_schema_version": "1.0.0",
+  "contract_version": "2.0.0-alpha.1",
+  "owner": "content-production",
+  "status": "alpha",
+  "maturity_tier": "contract-migration",
+  "review_cadence": "per-track-gate",
+  "contract_compatibility": {
+    "current": {
+      "contract_version": "2.0.0-alpha.1",
+      "artifact_schema_version": "1.0.0"
+    },
+    "legacy": {
+      "contract_version": "1.0.0",
+      "artifact_schema_version": "1.0",
+      "read_only": true
+    },
+    "migration_required_for_v2_tasks": true,
+    "v2_production_enabled": false
+  },
+  "schema_registry_path": "schemas/v2-alpha.registry.schema.json",
+  "schema_registry_version": "1.0.0",
+  "rollback_skill_version": "1.0.0",
+  "execution_mode": "manual-contract-only",
+  "pilot_policy": {
+    "maximum_active_pilots": 1,
+    "production_release": false,
+    "archive_allowed": false,
+    "approval_reuse_allowed": false,
+    "requires_gate_stop": true
+  },
+  "tracks": {
+    "track_a": "in_progress",
+    "track_b": "locked_until_g_a",
+    "track_c": "locked_until_g_b"
+  },
+  "guardrails": {
+    "trigger_eval": "manual_smoke_required",
+    "contract_validation": "manual_static_check_required",
+    "security_check": "manual_static_check_required"
+  }
+}

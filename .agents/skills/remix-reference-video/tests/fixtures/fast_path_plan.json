@@ -1,0 +1,54 @@
+{
+  "task_root": "work/fast-path-v0-fixture",
+  "execution_mode": "fast-path-v0",
+  "stages": [
+    {
+      "execution_stage_id": "fixture-reference-split",
+      "framework_stage_id": "performance_proven_video",
+      "argv": [
+        "python3",
+        "mock_stage.py",
+        "--output",
+        "recipe.json",
+        "--content",
+        "reference-facts"
+      ],
+      "inputs": [
+        "input.txt",
+        "mock_stage.py"
+      ],
+      "outputs": [
+        "recipe.json"
+      ],
+      "required_gates": [],
+      "stop_gate": "gate1",
+      "timeout_seconds": 10,
+      "cache": true
+    },
+    {
+      "execution_stage_id": "fixture-blueprint",
+      "framework_stage_id": "blueprint",
+      "argv": [
+        "python3",
+        "mock_stage.py",
+        "--output",
+        "shot_blueprint.json",
+        "--content",
+        "blueprint"
+      ],
+      "inputs": [
+        "recipe.json",
+        "mock_stage.py"
+      ],
+      "outputs": [
+        "shot_blueprint.json"
+      ],
+      "required_gates": [
+        "gate1"
+      ],
+      "stop_gate": null,
+      "timeout_seconds": 10,
+      "cache": true
+    }
+  ]
+}

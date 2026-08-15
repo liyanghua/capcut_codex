@@ -1,0 +1,87 @@
+artifact_type: "project_brief"
+schema_id: "urn:capcut:remix-reference-video:artifact:project-brief"
+schema_version: "1.0.0"
+contract_version: "2.0.0-alpha.1"
+skill_version: "2.0.0-alpha.1"
+
+project:
+  title: ""
+  content_goal: ""
+  work_date: "YYYY-MM-DD"
+  slug: ""
+  approver: ""
+  deadline: ""
+
+inputs:
+  reference_video: ""
+  assets_dir: "assets"
+  provided_script: ""
+  whisper_model_path: ""
+
+product:
+  name: ""
+  audience: ""
+  approved_claims: []
+  forbidden_claims: []
+  must_show: []
+
+target:
+  platform: ""
+  language: "zh-CN"
+  aspect_ratio: "9:16"
+  width: 1080
+  height: 1920
+  fps: 60
+  duration_policy: "voice_actual"
+
+matching:
+  minimum_confidence: 0.60
+  range_policy: "gate3_broad_gate4_exact"
+  allow_images: true
+  allow_ai_assets: true
+  allow_review_placeholders: false
+  missing_material_policy: "stop_and_ask"
+
+voice:
+  enabled: true
+  provider: "doubao"
+  requested_model: "DOUBAO_AUDIO"
+  protocol: "v3_websocket"
+  credential_env: "DOUBAO_TTS_KEY"
+  voice_type: ""
+  speed_ratio: 1.0
+  tone: ""
+  allow_rewrite: false
+  allow_delete_words: false
+
+subtitles:
+  mode: "sidecar_srt"
+  allow_burn_in: false
+  max_chars_per_cue: null
+
+visual_constraints:
+  product_must_be_visible: true
+  forbidden_overlays: []
+  protected_regions: []
+
+review:
+  gate_policy: "strict"
+  require_split_approval: true
+  require_claim_approval: true
+  require_material_approval: true
+  require_evidence_closure: true
+  require_voice_pre_generation: true
+  require_voice_post_generation: true
+  require_voice_approval: true
+  require_final_approval: true
+
+outputs:
+  render_preview: true
+  captions_srt: true
+  script_evidence_matrix: true
+  material_manifest: true
+  reconstruction_timeline: true
+  jianying_import_manifest: true
+  jianying_editable_draft: false
+  filename_prefix: ""
+  archive_after_approval: true

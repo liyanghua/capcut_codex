@@ -1,0 +1,17 @@
+{
+  "task_root": "work/track-b-fixture",
+  "execution_mode": "track-b-production",
+  "stages": [
+    {
+      "execution_stage_id": "track-b-production-stage",
+      "framework_stage_id": "performance_proven_video",
+      "argv": ["python3", "mock_stage.py", "--output", "recipe.json"],
+      "inputs": ["input.txt", "mock_stage.py"],
+      "outputs": ["recipe.json"],
+      "required_gates": [],
+      "stop_gate": null,
+      "timeout_seconds": 10,
+      "cache": true
+    }
+  ]
+}
