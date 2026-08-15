@@ -65,6 +65,13 @@ class TaskStorageTests(unittest.TestCase):
             self.store.update_state(lambda state: state, expected_revision=1)
         self.assertEqual(self.store.read_state()["state_revision"], 2)
 
+    def test_runtime_projection_keeps_legacy_state_explicitly_unsupported(self) -> None:
+        projection = self.store.read_runtime_projection()
+
+        self.assertFalse(projection["supported"])
+        self.assertIsNone(projection["execution_mode"])
+        self.assertEqual(projection["run_id"], "fixture")
+
     def test_event_append_is_process_locked_and_sequences_are_monotonic(self) -> None:
         process_count = 4
         events_per_process = 15

@@ -8,9 +8,11 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
+from types import MappingProxyType
 from typing import Any, Self
 
 EXECUTION_MODE = "fast-path-v0"
+PRODUCTION_EXECUTION_MODE = "track-b-production"
 MAX_STAGE_TIMEOUT_SECONDS = 86_400.0
 CANONICAL_GATE_ORDER = (
     "gate1",
@@ -22,6 +24,13 @@ CANONICAL_GATE_ORDER = (
     "gate5",
 )
 CANONICAL_GATE_IDS = frozenset(CANONICAL_GATE_ORDER)
+PRODUCTION_GATE_IDS = CANONICAL_GATE_IDS | {"gate3", "gate4"}
+WORK_STATUSES = frozenset(
+    {"not_started", "running", "succeeded", "blocked", "failed", "stale"}
+)
+GATE_STATUSES = frozenset(
+    {"not_ready", "awaiting_user", "approved", "rejected", "blocked", "stale"}
+)
 FRAMEWORK_STAGE_ORDER = (
     "performance_proven_video",
     "blueprint",
@@ -68,6 +77,130 @@ _STAGE_FIELDS = frozenset(
 
 class PlanValidationError(ValueError):
     """Raised when a Fast Path contract is malformed or unsafe."""
+
+
+def _status_map(
+    value: object,
+    *,
+    field_name: str,
+    allowed_statuses: frozenset[str],
+    allowed_ids: frozenset[str] | None = None,
+) -> Mapping[str, str]:
+    if not isinstance(value, Mapping):
+        raise PlanValidationError(f"{field_name} must be an object")
+    parsed: dict[str, str] = {}
+    for raw_id, raw_status in value.items():
+        item_id = _require_nonempty_string(raw_id, f"{field_name} id")
+        if allowed_ids is not None and item_id not in allowed_ids:
+            raise PlanValidationError(f"{field_name} contains unknown id: {item_id}")
+        status = _require_nonempty_string(raw_status, f"{field_name}.{item_id}")
+        if status not in allowed_statuses:
+            raise PlanValidationError(
+                f"{field_name}.{item_id} has unsupported status: {status}"
+            )
+        parsed[item_id] = status
+    return MappingProxyType(parsed)
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineState:
+    """Strict authoritative state used only by Track B production tasks."""
+
+    execution_mode: str
+    run_id: str
+    state_revision: int
+    active_stage: str | None
+    active_command: str | None
+    stage_status: Mapping[str, str]
+    gate_status: Mapping[str, str]
+    decisions: tuple[object, ...]
+    artifacts: Mapping[str, object]
+    blockers: tuple[object, ...]
+    cache_summary: Mapping[str, object]
+
+    @classmethod
+    def from_object(cls, value: Mapping[str, object]) -> Self:
+        if not isinstance(value, Mapping):
+            raise PlanValidationError("pipeline state must be an object")
+        execution_mode = _require_nonempty_string(
+            value.get("execution_mode"), "execution_mode"
+        )
+        if execution_mode != PRODUCTION_EXECUTION_MODE:
+            raise PlanValidationError(
+                f"execution_mode must be exactly {PRODUCTION_EXECUTION_MODE!r}"
+            )
+        run_id = _require_nonempty_string(value.get("run_id"), "run_id")
+        revision = _require_nonnegative_integer(
+            value.get("state_revision"), "state_revision"
+        )
+        active_stage = cls._optional_string(value.get("active_stage"), "active_stage")
+        active_command = cls._optional_string(
+            value.get("active_command"), "active_command"
+        )
+        decisions = value.get("decisions")
+        artifacts = value.get("artifacts")
+        blockers = value.get("blockers")
+        cache_summary = value.get("cache_summary")
+        if not isinstance(decisions, list):
+            raise PlanValidationError("decisions must be an array")
+        if not isinstance(artifacts, Mapping):
+            raise PlanValidationError("artifacts must be an object")
+        if not isinstance(blockers, list):
+            raise PlanValidationError("blockers must be an array")
+        if not isinstance(cache_summary, Mapping):
+            raise PlanValidationError("cache_summary must be an object")
+        return cls(
+            execution_mode=execution_mode,
+            run_id=run_id,
+            state_revision=revision,
+            active_stage=active_stage,
+            active_command=active_command,
+            stage_status=_status_map(
+                value.get("stage_status"),
+                field_name="stage_status",
+                allowed_statuses=WORK_STATUSES,
+            ),
+            gate_status=_status_map(
+                value.get("gate_status"),
+                field_name="gate_status",
+                allowed_statuses=GATE_STATUSES,
+                allowed_ids=PRODUCTION_GATE_IDS,
+            ),
+            decisions=tuple(decisions),
+            artifacts=MappingProxyType(dict(artifacts)),
+            blockers=tuple(blockers),
+            cache_summary=MappingProxyType(dict(cache_summary)),
+        )
+
+    @staticmethod
+    def _optional_string(value: object, field_name: str) -> str | None:
+        if value is None:
+            return None
+        return _require_nonempty_string(value, field_name)
+
+
+def project_runtime_state(value: Mapping[str, object]) -> dict[str, object]:
+    """Project old alpha state without silently upgrading it to production."""
+
+    mode = value.get("execution_mode")
+    if mode == PRODUCTION_EXECUTION_MODE:
+        state = PipelineState.from_object(value)
+        return {
+            "supported": True,
+            "execution_mode": state.execution_mode,
+            "run_id": state.run_id,
+            "state_revision": state.state_revision,
+            "active_stage": state.active_stage,
+            "active_command": state.active_command,
+        }
+    return {
+        "supported": False,
+        "execution_mode": mode if isinstance(mode, str) else None,
+        "run_id": value.get("run_id") if isinstance(value.get("run_id"), str) else None,
+        "state_revision": None,
+        "active_stage": None,
+        "active_command": None,
+    }
 
 
 def _require_nonempty_string(value: object, field_name: str) -> str:
