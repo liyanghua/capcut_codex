@@ -12,10 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from .asset_index import AssetIndexer, AssetIndexPrerequisiteError
+from .approvals import ApprovalError, ApprovalService
 from .contracts import ExecutionPlan, PlanValidationError
 from .ga_evidence import audit_ga, prepare_review, record_decision
 from .runner import FastPathRunner
 from .storage import StorageError, read_json_object, read_jsonl_records
+from .storage import TaskStorage
 
 
 EXIT_OK = 0
@@ -61,6 +63,14 @@ def _parser() -> argparse.ArgumentParser:
     ga_audit = commands.add_parser("ga-audit")
     ga_audit.add_argument("--task-dir", type=Path, required=True)
     ga_audit.add_argument("--json", action="store_true")
+
+    approve = commands.add_parser("approve-gate")
+    approve.add_argument("--task-dir", type=Path, required=True)
+    approve.add_argument("--gate", required=True)
+    approve.add_argument("--review-package-hash", required=True)
+    approve.add_argument("--decision-file", type=Path, required=True)
+    approve.add_argument("--actor", required=True)
+    approve.add_argument("--json", action="store_true")
 
     index = commands.add_parser("index-assets")
     index.add_argument("--assets-root", type=Path, required=True)
@@ -296,7 +306,12 @@ def _emit(value: dict[str, Any], *, json_output: bool, command: str) -> None:
             f"Indexed {value['supported_files']} media files; "
             f"cache hits {value['cache_hits']}; unreadable {value['unreadable_files']}"
         )
-    elif command in {"ga-prepare-review", "ga-record-decision", "ga-audit"}:
+    elif command in {
+        "ga-prepare-review",
+        "ga-record-decision",
+        "ga-audit",
+        "approve-gate",
+    }:
         print(f"{command}: {value.get('status', 'passed')}")
     else:
         print(f"Fast Path {value['status']}")
@@ -339,6 +354,15 @@ def main(argv: list[str] | None = None) -> int:
             payload = audit_ga(args.task_dir)
             _emit(payload, json_output=json_output, command=args.command)
             return EXIT_FAILED if payload["status"] == "failed" else EXIT_OK
+        if args.command == "approve-gate":
+            payload = ApprovalService(TaskStorage(args.task_dir)).approve(
+                gate_id=args.gate,
+                review_package_hash=args.review_package_hash,
+                decision_file=args.decision_file,
+                actor=args.actor,
+            )
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
         if args.command == "index-assets":
             summary = AssetIndexer(args.database).index(args.assets_root)
             payload = summary.to_dict()
@@ -351,6 +375,9 @@ def main(argv: list[str] | None = None) -> int:
     except sqlite3.Error as error:
         _emit_error(str(error), json_output=json_output, status="failed")
         return EXIT_FAILED
+    except ApprovalError as error:
+        _emit_error(str(error), json_output=json_output, status="blocked")
+        return EXIT_BLOCKED
     except (OSError, RuntimeError, StorageError, ValueError, PlanValidationError) as error:
         _emit_error(str(error), json_output=json_output)
         return EXIT_INVALID
