@@ -132,7 +132,7 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 
 - [ ] **Step 1: Write failing tests** for envelope/shape, artifact hash references, path allowlist, symlink escape, Gate 3 broad-range containment, timeline containment, and Gate 5 output bundle.
 - [x] **Step 2: Implement validator results as structured data**; validators must not mutate state or approve a Gate.
-- [ ] **Step 3: Wire validation into staging promotion and `audit`**. (`audit` complete; staging promotion integration remains.)
+- [x] **Step 3: Wire validation into staging promotion and `audit`**.
 - [x] **Step 4: Run the focused validator and all regression tests**.
 - [x] **Step 5: Commit** `feat: validate complete remix artifacts before promotion`.
 

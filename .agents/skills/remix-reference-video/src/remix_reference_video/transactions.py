@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from .artifact_validator import ArtifactValidator
 from .storage import (
     RevisionConflict,
     StorageError,
@@ -24,6 +25,7 @@ _TRANSACTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 class ArtifactPromotion:
     staged_path: Path
     final_path: Path
+    expected_type: str | None = None
 
 
 class TransactionManager:
@@ -88,6 +90,7 @@ class TransactionManager:
                 raise RevisionConflict(
                     f"expected state revision {before}, found {self._revision(state)}"
                 )
+            self._validate_promotions(record)
             self._promote(record)
             updated = self.storage.update_state(
                 lambda current: current | dict(record["state_changes"]),
@@ -134,7 +137,7 @@ class TransactionManager:
             atomic_write_json(self._record_path(transaction_id), record)
             return record
 
-    def _promotion_record(self, promotion: ArtifactPromotion) -> dict[str, str]:
+    def _promotion_record(self, promotion: ArtifactPromotion) -> dict[str, str | None]:
         staged = self._task_path(promotion.staged_path, "staged_path", must_exist=True)
         final = self._task_path(promotion.final_path, "final_path", must_exist=False)
         if not staged.is_file() or staged.is_symlink():
@@ -147,7 +150,25 @@ class TransactionManager:
             "staged_path": staged.relative_to(self.root).as_posix(),
             "final_path": final.relative_to(self.root).as_posix(),
             "sha256": digest,
+            "expected_type": promotion.expected_type,
         }
+
+    def _validate_promotions(self, record: Mapping[str, object]) -> None:
+        validator = ArtifactValidator(self.root)
+        for item in record.get("promotions", []):
+            if not isinstance(item, Mapping):
+                raise StorageError("promotion record must be an object")
+            expected_type = item.get("expected_type")
+            if expected_type is None:
+                continue
+            if not isinstance(expected_type, str) or not expected_type:
+                raise StorageError("promotion expected_type must be a nonempty string")
+            staged = self._task_path(
+                self.root / str(item["staged_path"]), "staged_path", True
+            )
+            result = validator.validate_artifact(staged, expected_type)
+            if not result.valid:
+                raise StorageError("; ".join(result.errors))
 
     def _promote(self, record: Mapping[str, object]) -> None:
         for item in record.get("promotions", []):

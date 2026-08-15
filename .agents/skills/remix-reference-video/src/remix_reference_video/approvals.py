@@ -187,6 +187,9 @@ class ApprovalService:
             **candidate,
             "artifact_type": "approved_production_script",
             "schema_id": "urn:capcut:remix-reference-video:artifact:approved-production-script",
+            "schema_version": "1.0.0",
+            "contract_version": "2.0.0-alpha.1",
+            "skill_version": "2.0.0-alpha.1",
             "lifecycle_status": "approved",
             "tts_settings": dict(settings),
             "approval": dict(record),
@@ -198,7 +201,11 @@ class ApprovalService:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         final = self.root / "approved_production_script.json"
         return (
-            ArtifactPromotion(staged_path=staged, final_path=final),
+            ArtifactPromotion(
+                staged_path=staged,
+                final_path=final,
+                expected_type="approved_production_script",
+            ),
             {"path": "approved_production_script.json", "sha256": digest},
         )
 

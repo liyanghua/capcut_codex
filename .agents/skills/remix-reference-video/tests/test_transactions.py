@@ -98,6 +98,29 @@ class TransactionManagerTests(unittest.TestCase):
         self.assertEqual(record["state_revision_after"], 1)
         self.assertEqual(record["status"], "prepared")
 
+    def test_declared_artifact_type_must_validate_before_promotion(self) -> None:
+        staged = self.root / ".staging/invalid/recipe.json"
+        staged.parent.mkdir(parents=True)
+        staged.write_text('{"artifact_type":"recipe"}\n', encoding="utf-8")
+        self.manager.prepare(
+            transaction_id="invalid-artifact",
+            expected_revision=0,
+            state_changes={"active_stage": "reference_split"},
+            event={"event_type": "stage.completed"},
+            promotions=(
+                ArtifactPromotion(
+                    staged_path=staged,
+                    final_path=self.root / "versions/invalid/recipe.json",
+                    expected_type="recipe",
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(Exception, "schema_version"):
+            self.manager.commit("invalid-artifact")
+        self.assertEqual(self.store.read_state()["state_revision"], 0)
+        self.assertFalse((self.root / "versions/invalid/recipe.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

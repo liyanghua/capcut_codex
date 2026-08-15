@@ -22,6 +22,7 @@ B0 的权威状态、可恢复事务、哈希绑定审批、显式 DAG 和只读
 - `.transactions/<transaction_id>.json` prepared/committed 记录。
 - expected revision 冲突拒绝。
 - staging 到不可变版本路径的原子提升。
+- 声明产物类型的 staging 文件在提升前执行完整 V2 envelope 校验；失败不更新状态或生成最终文件。
 - state 已提交但 event/metric 缺失时幂等恢复。
 - state 未提交时清理孤儿产物。
 - 无法自动测得的指标恢复为 `measurement_status=partial`，不伪造零耗时。
@@ -52,7 +53,7 @@ B0 的权威状态、可恢复事务、哈希绑定审批、显式 DAG 和只读
 ## 验证
 
 ```text
-106 tests passed
+107 tests passed
 Track A static contract checks passed
 ```
 
