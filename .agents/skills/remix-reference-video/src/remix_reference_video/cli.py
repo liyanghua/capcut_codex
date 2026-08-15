@@ -13,7 +13,13 @@ from typing import Any
 
 from .asset_index import AssetIndexer, AssetIndexPrerequisiteError
 from .approvals import ApprovalError, ApprovalService
-from .contracts import ExecutionPlan, PlanValidationError
+from .artifact_validator import ArtifactValidator
+from .contracts import (
+    PRODUCTION_EXECUTION_MODE,
+    ExecutionPlan,
+    PipelineState,
+    PlanValidationError,
+)
 from .ga_evidence import audit_ga, prepare_review, record_decision
 from .runner import FastPathRunner
 from .storage import StorageError, read_json_object, read_jsonl_records
@@ -132,6 +138,8 @@ def audit_task(task_dir: Path) -> dict[str, Any]:
 
     root = _task_root(task_dir)
     state = read_json_object(root / "pipeline_state.json")
+    if state.get("execution_mode") == PRODUCTION_EXECUTION_MODE:
+        return _audit_production_task(root, state)
     errors: list[str] = []
     warnings: list[str] = []
     mode = state.get("execution_mode")
@@ -251,6 +259,45 @@ def audit_task(task_dir: Path) -> dict[str, Any]:
         "execution_mode": mode,
         "state_revision": revision,
         "event_count": len(events),
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+def _audit_production_task(root: Path, state: dict[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    try:
+        parsed = PipelineState.from_object(state)
+    except PlanValidationError as error:
+        errors.append(str(error))
+        parsed = None
+    validator = ArtifactValidator(root)
+    artifacts = state.get("artifacts")
+    if isinstance(artifacts, dict):
+        for artifact_id, record in artifacts.items():
+            if not isinstance(record, dict):
+                errors.append(f"registered artifact is invalid: {artifact_id}")
+                continue
+            path, digest = record.get("path"), record.get("sha256")
+            if not isinstance(path, str):
+                errors.append(f"registered artifact has no path: {artifact_id}")
+                continue
+            result = validator.validate_hash(path, str(digest))
+            errors.extend(result.errors)
+    else:
+        errors.append("artifacts must be an object")
+    gates = state.get("gate_status")
+    if isinstance(gates, dict) and gates.get("gate5") == "approved":
+        result = validator.validate_gate5_bundle(artifacts if isinstance(artifacts, dict) else {})
+        errors.extend(result.errors)
+    status = "failed" if errors else ("passed_with_warnings" if warnings else "passed")
+    return {
+        "status": status,
+        "run_id": None if parsed is None else parsed.run_id,
+        "execution_mode": state.get("execution_mode"),
+        "state_revision": state.get("state_revision"),
+        "event_count": len(read_jsonl_records(root / "pipeline_events.jsonl")),
         "errors": errors,
         "warnings": warnings,
     }
