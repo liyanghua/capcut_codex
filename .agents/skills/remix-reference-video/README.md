@@ -77,6 +77,8 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py gb-pair \
   --json
 ```
 
+不提供 `--decision-dir` 时，命令会在第一个需要人工确认的 Gate 停止；这是默认安全行为。由 Codex 交互运行时，应在每次用户批准后写入当前任务的决定文件，再用 `--resume-existing` 续跑。只有审核人已经为本次任务准备好全部结构化决定文件时，才传入 `--decision-dir <decision-dir>`，且每个文件仍会绑定当前审核包哈希和 `state_revision`，不能复用其他任务决定。
+
 该命令会：
 
 1. 为 cold/hot 创建独立任务、审批和缓存根目录；
