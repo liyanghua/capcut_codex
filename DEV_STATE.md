@@ -1,3 +1,49 @@
-# 当前开发状态（2026-08-15）
+# 当前开发状态（2026-08-16）
 
-当前目标是把完整参考视频按 `remix-reference-video` 五阶段流程转成可审核的 9:16 产品片，并先用一个不继承旧批准的 `manual-contract-only` 替代 pilot 收口 G-A；Track A 的 `2.0.0-alpha.1` 静态契约、版本边界、共同 envelope、Gate 3/4 子状态和 Fast Path v0 实验执行器已完成，核心实现位于 `.agents/skills/remix-reference-video/{SKILL.md,manifest.json,track_a_static_check.py,src/,tests/}`，规范和结论位于 `docs/track-a-assessment-2026-08-13.md`、`docs/g-a-assessment-2026-08-15.md`、`docs/fast-path-v0-implementation-plan.md`；旧 pilot `work/2026-08-13-tablemat-pilot/` 已完成 Gate 1–5，成片获用户批准，但因一次随后撤销的 Gate 3 越权记录而 G-A 未通过，pilot 仍留在 `work/`、不得归档或复用，Track B/C 继续锁定；替代 pilot `work/2026-08-15-tablemat-ga-replacement-pilot/` 不复用旧批准，当前以 `pipeline_state.json` 为准，Gate 1 为 `approved`、`content_blueprint` 为 `running`，Gate 2–5 尚未开始，下一步是完成并核对 Blueprint 与 Controlled Mutation 产物后提交 Gate 2，现有 `gate1_review.md` 和 `stage_assessments/` 仍写着旧的 `awaiting_user`，属于待同步状态；本次已验证 Fast Path unittest `75/75`、Track A 静态单测 `2/2`、静态检查 `checked_files=15`、matcher/validator `51/51`、Gate 4 `7/7` 和 Gate 5 adapter `10/10` 通过，静态检查仍明确不覆盖 trigger 行为、完整 artifact shape 和生产媒体比较（另有历史记录的 trigger fixture `12/12` 与媒体摘要一致性）；两项 Pillow 图像测试因环境缺少 `PIL` 未运行，旧语音回归有 3 项因 fixture/元数据不一致失败，文档记录的历史回归 `59/59` 本次未作为总数复现，且裸 `unittest` 未设置 skill `src` 的 `PYTHONPATH` 会产生导入失败；本目录没有 Git 元数据，无法提供有效 `git diff`，因此当前状态以工作树、`pipeline_state.json` 和上述文档为准，替代 G-A 明确通过前不启动 Track B/C、普通 V2 生产或归档。
+## 当前结论
+
+参考视频复刻的 Track B 生产后端已经合并到 `main`，并形成可复用的 `.agents/skills/remix-reference-video` Skill 包。Native Runner 已覆盖参考拆解、Blueprint、Controlled Mutation、Retrieval、Gate 3 双子状态、Voice Preflight、TTS、时间轴、代理检查、正式渲染、Gate 5 和只读审计。
+
+真实配对任务 `work/2026-08-16-gb-pair-real-2/` 的 cold/hot 均使用真实 FFmpeg、ffprobe 和豆包 TTS 完成 Gate 1–5，最终技术校验通过。机器/API 关键路径为 cold `32.178s`、hot `36.183s`。配对状态为 `measured_pending_review`，不是 G-B 正式通过。
+
+## 新任务入口
+
+- 历史 V1 任务：按创建时 V1 契约续跑，不改写 `schema_version=1.0`、`recipe.json` 或旧审批。
+- 新 V2 case：先完成 Stage 0，准备冻结目录中的唯一 `reference-*.mp4`、`project_brief.json`、`asset_profiles.json` 和 `g_b_frozen_input_snapshot.json`，再通过隔离 `gb-pair` 逐 Gate 运行。
+- 普通 `production-run`、共享生产缓存和一线无监督发布：在 G-B 与监督运营试用通过前保持关闭。
+- Skill 使用说明：[`.agents/skills/remix-reference-video/README.md`](/Users/yichen/Desktop/OntologyBrain/capcut_codex/.agents/skills/remix-reference-video/README.md)。
+
+缺少产品事实、已批准卖点、禁用声明或素材哈希时必须暂停补齐，不得从文件名、旧案例或空白信息推断。
+
+## 关键证据
+
+- [V2 基线报告](/Users/yichen/Desktop/OntologyBrain/capcut_codex/docs/remix-production-v2-baseline-report-2026-08-16.md)
+- [G-B 测量记录](/Users/yichen/Desktop/OntologyBrain/capcut_codex/work/2026-08-16-gb-pair-real-2/gb_measurement.json)
+- [后端实施状态](/Users/yichen/Desktop/OntologyBrain/capcut_codex/docs/remix-production-backend-implementation-status.md)
+- 主干合并提交：`3accf6d`
+- 新任务文档提交：`fd73c8d`、`4a518e4`
+
+## 验证状态
+
+```text
+PYTHONPATH=.agents/skills/remix-reference-video/src \
+  python3 -m unittest discover -s .agents/skills/remix-reference-video/tests -q
+203 tests passed, 1 optional FastAPI test skipped
+
+python3 .agents/skills/remix-reference-video/track_a_static_check.py
+PASS: Track A static contract checks
+```
+
+主干 `origin/main` 已包含合并提交 `3accf6d`；文档提交 `fd73c8d` 和 `4a518e4` 需要一并推送。当前工作区中以下两个未跟踪文件属于已有工作，不纳入本次状态提交：
+
+```text
+docs/review-workbench-page-design.md
+docs/superpowers/plans/2026-08-16-native-runner-cli-gb-pair.md
+```
+
+## 剩余阻塞
+
+1. 完成 Track C 五阶段质量评分，生成合法的 `phase6_score_snapshot.json`。
+2. 补采人工等待、运营触达、完整墙钟、缓存命中和 `approvals_recorded` 汇总指标。
+3. 由 owner 复核新 V2 `measured_baseline_v0` 是否作为后续回归基线，并决定 G-B 口径。
+4. 完成监督运营试用后，才考虑解锁普通 V2 production 和 Backlot 前端。

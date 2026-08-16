@@ -8,8 +8,9 @@
 - G-A 通过后，Track B 必须按 B0 → B1/B4a → B2/B3 → B4 → B5 顺序执行；`pipeline_state.json` 是唯一状态/审批权威，`approve-gate` 必须绑定当前审核包哈希、可信服务时间和 `state_revision`，不能复用其他任务批准。
 - 当前 `skill_version` 与 `contract_version` 均为 `2.0.0-alpha.1`。V2 新建机器产物统一使用 `schema_version=1.0.0`，并声明 `artifact_type` 与 `schema_id`；canonical registry 为 `.agents/skills/remix-reference-video/schemas/v2-alpha.registry.schema.json`。
 - 历史 V1 产物保留创建时的 `schema_version=1.0`，不得为了兼容 V2 而原地改写。
-- 静态检查器不负责 trigger 行为、完整产物 shape 或生产媒体比较。Track A 收口已另行完成 12 条独立 trigger 前向评测和 `work/` 媒体摘要前后对比；完整产物 shape 校验仍延后到 Track B。任何单项结果都不能被扩大表述为 G-A、G-B 或发布质量已通过。
+- 静态检查器不负责 trigger 行为或生产媒体比较。Track A 收口已另行完成 12 条独立 trigger 前向评测和 `work/` 媒体摘要前后对比；完整产物 shape、事务、审批和真实 adapter 已由 Track B 测试覆盖。任何单项结果都不能被扩大表述为 G-B 或发布质量已通过。
 - Native Runner 已接入正式 CLI 的显式 `production_runtime_config.json`；普通 `run/stage/resume` 仍受 `track_b=locked_until_g_a` 保护。唯一隔离例外 `gb-pair` 已在 `work/2026-08-16-gb-pair-real-2/` 完成真实 cold/hot 配对：两侧均独立通过 Gate 1–5，真实 FFmpeg/TTS 成片、代理检查和最终校验通过；Gate 5 后只复制声明 cache，hot 保留自己的增量索引，未复用审批。配对当前为 `measured_pending_review`，G-B 仍需 V1 可比性和 owner 阈值复核，普通 V2 生产与一线发布继续锁定。
+- 主干 Skill 入口为 `.agents/skills/remix-reference-video/README.md`。历史 V1 任务按创建时契约续跑；新 V2 case 先完成 Stage 0，冻结 `reference-*.mp4`、`project_brief.json`、`asset_profiles.json` 和 `g_b_frozen_input_snapshot.json`，再使用隔离 `gb-pair`。缺少冻结事实时必须暂停补齐，不得从文件名或空白信息推断产品声明。
 
 ## 目标
 
@@ -25,6 +26,7 @@
 - `.agents/skills/`：项目内可版本化、可安装的 Codex Skill 包；工作产物不放在 Skill 包内。
 - `work/`：正在制作或待审核的视频项目。每次剪辑在这里创建一个当日工作文件夹。
 - `final/`：已经完成并确认通过的视频，从 `work/` 迁移到这里，避免工作区文件过多。
+- `.agents/skills/remix-reference-video/README.md`：新窗口启动模板、V1 续跑边界、V2 冻结输入和 `gb-pair` 操作说明。
 
 每次剪辑时，在 `work/` 下创建一个当日工作文件夹：
 
@@ -119,7 +121,7 @@ Performance-proven Video → Blueprint → Controlled Mutation → Retrieval →
 5. Retrieval：读取只读 `assets/`，完成覆盖分析、资格门禁、视觉匹配、全局排程和逐句证据校验。Gate 3 拆为选材确认与证据闭环两个子状态；汇总通过后才形成不可变宽范围 `fragment_plan.json`。
 6. Reconstruction：复制/导出 Gate 3 批准宽范围到 `material/`，生成 `material_manifest.json`；先以 Gate 3 画面预算、候选文案和拟用语速生成 `voice_preflight.json`，通过后才生成 Gate 4 生成前审核包。Gate 4 生成前批准后调用 TTS，以实测时长再次校验预算并生成 `reconstruction_timeline.json` 和 SRT；先完成 Gate 4 生成后听审，再做代理/边界检查和正式成片，最后进入 Gate 5。
 
-V1/V2 边界：已经开始的 V1 任务按创建时契约续跑，不自动取得 V2 Gate 授权。G-A 通过前只允许一个逐 Gate 停止的 `manual-contract-only` V2 pilot 采集前向证据；pilot 不是生产发布，不进入 `final/`，不启动 Track B 执行器，也不得把其 Gate 决定复用于其他任务。其他新生产任务继续使用稳定 V1 或等待迁移决定；G-A 通过后才允许普通新任务作为 V2 生产任务启动。旧任务迁移必须生成映射、输入哈希、失效 Gate 和重新确认清单，不能用旧批准替代新子状态。
+V1/V2 边界：已经开始的 V1 任务按创建时契约续跑，不自动取得 V2 Gate 授权。G-A 已通过，Track B 已合并主干；在 G-B 和监督运营试用通过前，普通 V2 production、共享生产缓存和一线发布仍关闭。新 V2 case 先完成 Stage 0 冻结输入，再通过隔离 `gb-pair` 逐 Gate 运行；配对不是普通发布，不进入 `final/`，也不能复用其他任务审批。旧任务迁移必须生成映射、输入哈希、失效 Gate 和重新确认清单，不能用旧批准替代新子状态。
 
 ## 输出
 
