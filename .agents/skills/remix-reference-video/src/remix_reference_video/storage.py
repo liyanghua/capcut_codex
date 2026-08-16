@@ -245,6 +245,13 @@ class TaskStorage:
         with self._locked(fcntl.LOCK_SH):
             return read_json_object(self.state_path)
 
+    def read_runtime_projection(self) -> dict[str, object]:
+        """Return a migration-safe runtime view without changing task state."""
+
+        from .contracts import project_runtime_state
+
+        return project_runtime_state(self.read_state())
+
     def update_state(
         self,
         transform: Callable[[dict[str, Any]], Mapping[str, object]],

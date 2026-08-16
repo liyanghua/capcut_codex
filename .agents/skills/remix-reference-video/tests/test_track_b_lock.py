@@ -50,6 +50,44 @@ class TrackBLockTests(unittest.TestCase):
         self.assertFalse((task / "pipeline_state.json").exists())
         self.assertEqual(manifest_before, (SKILL_ROOT / "manifest.json").read_bytes())
 
+    def test_production_cli_commands_reject_before_task_or_cache_writes(self) -> None:
+        reference = self.workspace / "reference.mp4"
+        reference.write_bytes(b"reference")
+        new_task = self.workspace / "work" / "new-production"
+
+        code, payload = self.invoke(
+            "init",
+            "--workspace-root",
+            str(self.workspace),
+            "--task-dir",
+            str(new_task),
+            "--reference",
+            str(reference),
+            "--json",
+        )
+
+        self.assertEqual(code, 2)
+        self.assertIn("Track B", str(payload.get("error")))
+        self.assertFalse(new_task.exists())
+
+        existing = self.workspace / "work" / "existing-production"
+        existing.mkdir(parents=True)
+        sentinel = existing / "sentinel.txt"
+        sentinel.write_text("unchanged", encoding="utf-8")
+        for arguments in (
+            ("run", "--task-dir", str(existing), "--reference", str(reference), "--json"),
+            ("stage", "--task-dir", str(existing), "--reference", str(reference), "--stage", "split-reference", "--json"),
+            ("resume", "--task-dir", str(existing), "--reference", str(reference), "--json"),
+        ):
+            with self.subTest(command=arguments[0]):
+                command_code, command_payload = self.invoke(*arguments)
+                self.assertEqual(command_code, 2)
+                self.assertIn("Track B", str(command_payload.get("error")))
+                self.assertEqual(sentinel.read_text(encoding="utf-8"), "unchanged")
+                self.assertEqual(
+                    sorted(path.name for path in existing.iterdir()), ["sentinel.txt"]
+                )
+
     def test_fast_path_fixture_remains_executable(self) -> None:
         task = self.workspace / "work" / "fast-path-v0-fixture"
         shutil.copytree(FIXTURES / "fast_path_task", task)

@@ -1,24 +1,23 @@
 # 参考视频复刻 Skill 性能与效果优化方案
 
 版本：2026-08-15  
-状态：Track A 静态护栏已通过；旧 V2 pilot 与替代 pilot 均已形成 Gate 5 成片证据，但替代 G-A 仍未通过；Track B/C 继续锁定。生产后端固化设计与实施计划已确认，但尚未启用 Track B，详见 `docs/reference-video-remix-pilot-readiness-report-2026-08-15.md`、`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 和 `docs/superpowers/plans/2026-08-15-remix-production-backend.md`。  
+状态：Track A 静态护栏与独立 clean harness 的 G-A 已通过；替代 pilot 已形成 Gate 5 成片证据但仍保留在 `work/`，不能作为 golden fixture 或复用审批。Track B 后端按计划实施中，普通 V2 生产与 Track C 继续锁定。详见 `docs/g-a-assessment-2026-08-15.md`、`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 和 `docs/superpowers/plans/2026-08-15-remix-production-backend.md`。
 适用范围：`.agents/skills/remix-reference-video/` 及其后续确定性执行工具  
 关联文档：`docs/reference-video-remix-sop.md`、`AGENTS.md`
 
 当前发布口径固定为：`skill_version=2.0.0-alpha.1`、`contract_version=2.0.0-alpha.1`。V2 新建产物的格式版本使用 `schema_version=1.0.0`，并同时声明 `artifact_type` 与 `schema_id`；历史 V1 产物继续保留创建时的 `schema_version=1.0`，不得为了通过 V2 校验原地改写。canonical registry 为 `.agents/skills/remix-reference-video/schemas/v2-alpha.registry.schema.json`。
 
-“静态护栏已通过”只表示当前版本标记、registry envelope、Brief/OpenAI YAML 解析、trigger fixture 结构和静态安全字面量检查通过。Track A 收口已在静态检查器之外完成 12 条独立 trigger 前向评测和 `work/` 媒体摘要前后对比；完整 artifact shape 校验仍延后到 Track B。以上证据均不能据此宣称 G-A、G-B 或发布质量已经通过，详见 `docs/track-a-assessment-2026-08-13.md`。
+“静态护栏已通过”只表示当前版本标记、registry envelope、Brief/OpenAI YAML 解析、trigger fixture 结构和静态安全字面量检查通过。Track A 收口已在静态检查器之外完成 12 条独立 trigger 前向评测和 `work/` 媒体摘要前后对比；完整 artifact shape 校验已由 Track B 测试覆盖。以上静态证据不能替代 G-B 或发布质量验收；G-A 的独立结论见 `docs/g-a-assessment-2026-08-15.md`。
 
-当前前向 pilot 为 `work/2026-08-13-tablemat-pilot/`。其参考事实层为 16 个原始镜头，Gate 2 批准后的目标结构为 11 个生产片段；Gate 1–5 均已通过，11/11 个片段已有批准素材，9/9 句口播已有画面证据，真实 TTS、字幕、精确时间轴和最终预览均已形成。G-A 因一次已撤销的 Gate 3 越权记录未通过，详见 `docs/g-a-assessment-2026-08-15.md`。下文 `work/2026-08-11-douyin-tablemat-01/` 的数据只代表历史 V1 回溯基线，不得与该 pilot 的前向状态混称为“当前案例”。
+当前前向 pilot 为 `work/2026-08-13-tablemat-pilot/`。其参考事实层为 16 个原始镜头，Gate 2 批准后的目标结构为 11 个生产片段；Gate 1–5 均已形成证据，11/11 个片段已有批准素材，9/9 句口播已有画面证据，真实 TTS、字幕、精确时间轴和最终预览均已形成。该历史 pilot 的越权记录仍保留为失败事实；独立 clean harness 的 G-A 通过不回写历史 pilot。下文 `work/2026-08-11-douyin-tablemat-01/` 的数据只代表历史 V1 回溯基线，不得与该 pilot 的前向状态混称为“当前案例”。
 
-替代 G-A pilot 为 `work/2026-08-15-tablemat-ga-replacement-pilot/`。该任务最终 27.936 秒成片已通过 Gate 5，但 Fast Path 只读审计报告 `unsupported execution_mode`、`state_revision=null`、`event_count=0`，且存在 Gate 3 范围扩展与 Gate 4 生成前批准的时间线倒置。因此它只能作为成片与人工路径评估证据，不能解锁 Track B、不能作为 golden fixture、不能复用批准、不能归档到 `final/`。
+替代 pilot 为 `work/2026-08-15-tablemat-ga-replacement-pilot/`。该任务最终 27.936 秒成片已通过 Gate 5，但 Fast Path 只读审计报告 `unsupported execution_mode`、`state_revision=null`、`event_count=0`，且存在 Gate 3 范围扩展与 Gate 4 生成前批准的时间线倒置。因此它只能作为成片与人工路径评估证据，不能作为 golden fixture、不能复用批准、不能直接解锁普通 V2 生产、不能归档到 `final/`。
 
 ### 当前后端固化边界（2026-08-15）
 
-- G-A 通过前只允许：生产后端设计、实施计划、静态契约、隔离 fixture、Track B 锁测试和文档同步；不得实现或启用真实 Track B 运行时、共享生产缓存或五阶段生产命令。
-- G-A 通过后才允许按 B0 → B1/B4a → B2/B3 → B4 → B5 顺序实现确定性执行器；每个工作包须先通过 owner 记录的 G-A preflight。
+- G-A 通过后允许按 B0 → B1/B4a → B2/B3 → B4 → B5 顺序实现确定性执行器；当前 native runner 和真实参考切分已在隔离任务验证，普通 V2 生产、共享生产缓存和一线发布仍等待 G-B 与监督运营试用。
 - `pipeline_state.json` 是唯一状态/审批权威；`approve-gate` 必须使用 schema 校验的结构化决定文件、当前审核包哈希、trusted server timestamp 和 state revision。
-- FastAPI/SSE 只读投影与 `ProgressView` 契约可随 B0 设计，但 Backlot 前端等待 G-B；manifest 继续保持 `track_b=locked_until_g_a`、`track_c=locked_until_g_b`。
+- FastAPI/SSE 只读投影与 `ProgressView` 契约已实现但真实 optional-extra 路由测试受环境依赖阻塞；Backlot 前端等待 G-B；manifest 保持 `track_b=locked_until_g_a`、`track_c=locked_until_g_b` 作为发布保险栓。
 
 **sentence08 契约修复（2026-08-14）**：一次脚本编译曾把 Gate 2 批准的“铺好以后，日常使用都好打理。”静默改成“铺好以后，日常使用更省心。”。现已恢复 Gate 2 原句，并用当前 11 段素材重新生成 `script_evidence_matrix.json` 与 `production_script_candidate.json`；用户已明确通过修复后的 Gate 3 证据闭环。编译器和 Gate 4 适配器都校验候选句子必须等于 Gate 2 基线或命中已批准 fallback，防止该问题再次进入 TTS。Gate 4 生成前仍需单独确认最终文案与声音设置。
 
@@ -588,17 +587,19 @@ Gate 编号和最终授权人不变，只调整 Gate 2 与 Gate 4 的输入、�
 |---|---|
 | Gate 1 | 参考镜头切分和异常切点 |
 | Gate 2 | 原子批准 `{content_baseline_hash, mutation_plan_hash}`：目标结构、批准卖点、禁用声明、口播意图/时长包络、允许变更与回退规则；不调用真实 TTS |
-| Gate 3 选材确认 | 批准素材源、动作完整性、叠字/连续性和足够宽的可用时间范围，形成不可变 `fragment_plan.json`；不锁死最终精确裁点 |
+| Gate 3 选材确认 | 批准素材源、动作完整性、叠字/连续性和足够宽的可用时间范围，形成不可变 `fragment_plan.json`；同时冻结 `media_type` 与视频画面时长预算（`approved_end-approved_start`，图片为 `null`）；不锁死最终精确裁点 |
 | Gate 3 证据闭环 | 将每句候选口播映射到选材确认子状态批准的证据窗；机器 `pass` 只表示审核包可提交，仍须用户对当前哈希明确批准后才闭环；`review_required` 必须回到同一 Gate 3 取得明确决定 |
-| Gate 4 生成前 | 逐句证据通过后的最终生产脚本、模型/协议、音色、语速、发音和字速风险 |
+| Gate 4 生成前 | `voice_preflight.json` 通过后的最终生产脚本、模型/协议、音色、语速、发音和字速风险；预检必须先于 TTS |
 | Gate 4 生成后 | 实际音频、实测时长、字幕断句、累计画面时间轴、Gate 3 宽范围内的精确裁点和听审结果 |
 | Gate 5 | 最终视频、SRT、报告和导入清单 |
 
-V2 中，Gate 2 之前和 Gate 3 之前不得调用真实 TTS；Gate 2 不批准最终生产脚本，只原子批准 Blueprint 的 `content_baseline.json` 与 Controlled Mutation 的 `mutation_plan.json`。Gate 3 汇总状态只有在 `gate3_material_selection` 与 `gate3_evidence_closure` 都对当前输入哈希有效时才为 `approved`；任一必需片段或动作组仍为 `awaiting_user|blocked|stale` 时，不得编译完整生产脚本或生成生产媒体。Gate 3 通过后，Controlled Mutation 编译 `production_script_candidate.json`，再停在 Gate 4 生成前确认；通过后由同一审批事务提升为不可变 `approved_production_script.json` 并允许 Reconstruction 开始。Gate 4 的生成后听审不能因生成前已批准而取消。V1 任务仍按创建时的 Skill 契约执行，不把本段当作对旧任务的追溯授权。
+V2 中，Gate 2 之前和 Gate 3 之前不得调用真实 TTS；Gate 2 不批准最终生产脚本，只原子批准 Blueprint 的 `content_baseline.json` 与 Controlled Mutation 的 `mutation_plan.json`。Gate 3 汇总状态只有在 `gate3_material_selection` 与 `gate3_evidence_closure` 都对当前输入哈希有效时才为 `approved`；任一必需片段或动作组仍为 `awaiting_user|blocked|stale` 时，不得编译完整生产脚本或生成生产媒体。Gate 3 通过后，Controlled Mutation 编译 `production_script_candidate.json`，Reconstruction 根据 Gate 3 画面预算生成 `voice_preflight.json`；只有预检通过才生成 Gate 4 生成前确认包。通过后由同一审批事务提升为不可变 `approved_production_script.json` 并允许 Reconstruction 开始。Gate 4 的生成后听审不能因生成前已批准而取消。V1 任务仍按创建时的 Skill 契约执行，不把本段当作对旧任务的追溯授权。
 
-精确源时段的唯一时机是：`gate4_pre_generation=approved` → 真实 TTS → 实测音频 → 构建 `reconstruction_timeline.json` → `gate4_post_generation` 听审。不得把“Gate 4 后”含混理解为生成后听审完成后才裁点。失效规则如下：
+配音调用的唯一时机是：Gate 3 画面预算 → `voice_preflight` → `gate4_pre_generation=approved` → 真实 TTS。精确源时段的唯一时机是：TTS → 实测音频预算复核 → 构建 `reconstruction_timeline.json` → `gate4_post_generation` 听审。不得把“Gate 4 后”含混理解为生成后听审完成后才裁点。失效规则如下：
 
 - 精确时段完全位于 Gate 3 批准的宽范围内：执行确定性裁点和验证，不新增 Gate；
+- `voice_preflight` 估算超出视频预算：在 TTS 前阻断，只允许缩短文案、使用 Gate 2 fallback、扩大 Gate 3 宽范围或返回 Gate 2 调整结构；预检未通过不得生成 Gate 4 审核包；
+- TTS 实测超出视频预算：保留诊断音频但不得进入正式时间轴，返回受影响 Gate 3/4；不得自动变速、冻结尾帧或越过批准范围；
 - 精确时段超出批准范围，或需要更换源素材：将受影响片段/动作组的 Gate 3 和下游状态标为 `stale`，返回 Gate 3；
 - 相同文案、相同模型/音色/语速下的技术性重试：只使 Gate 4 生成后音频和下游失效；新时长仍落在 Gate 3 宽范围内时复用素材批准，否则使受影响片段/动作组的 Gate 3 失效；
 - 更换模型、音色、语速或其他已批准配音设置：使 `gate4_pre_generation`、`gate4_post_generation`、对应音频、字幕、精确时间轴、渲染和 Gate 5 失效；只有新实测时长超出 Gate 3 宽范围时才使相关 Gate 3 失效，只有超出 Gate 2 时长包络时才返回 Gate 2；
@@ -617,6 +618,7 @@ Gate 3 不拥有删并段权限。运营在 Gate 3 发现缺素材时只能记�
 | `mutation_plan.json` | Controlled Mutation | Gate 2 以新版本替换 | 记录允许/禁止变化和 fallback，不得由 Retrieval 改写 |
 | `coverage_report.json`、`matches.json`、`script_evidence_matrix.json` | Retrieval | 输入变化后生成新版本 | 生命周期为 `ready|blocked|stale`；审批引用写在 `pipeline_state.json` |
 | `fragment_plan.json` | Retrieval | Gate 3 后不可变 | 只保存批准素材源和宽范围；精确裁点不得覆盖它 |
+| `voice_preflight.json` | Reconstruction | Gate 3 汇总后、Gate 4 生成前 | 逐段绑定画面预算和配音估算；阻塞项必须在 TTS 前处理 |
 | `production_script_candidate.json`、`approved_production_script.json` | Controlled Mutation | 候选可重建；批准版不可变 | 批准版只能由 Gate 4 生成前事务提升，是 TTS 唯一文本输入 |
 | `material_manifest.json`、`reconstruction_timeline.json` | Reconstruction | 按有效批准输入重建 | 前者记录物理复制/宽范围导出，后者记录实测音频后的精确裁点并验证 containment |
 | 配音、字幕、代理、正式视频和交付报告 | Reconstruction | 输入哈希变化后重建 | 只消费批准脚本、Gate 3 宽范围和任务目录 `material/` |
@@ -646,6 +648,7 @@ V2 不再使用含混的 `export-approved` / `export-approved-broad`。统一命
 | `build-production-script` | Controlled Mutation | Gate 3 汇总 approved | 内容基线、变更计划、证据矩阵 → `production_script_candidate.json` | 不写 Gate 4 批准；未命中 fallback 时返回 Gate 2/3 阻塞 | 三个输入哈希 + 编译器版本 |
 | `promote-production-script` | Controlled Mutation | Gate 4 生成前明确批准 | 候选脚本、TTS 设置、Gate 决定 → `approved_production_script.json` | 与 `gate4_pre_generation` 在同一小型事务中原子提升；使旧音频下游 stale | 决定 ID + 候选/TTS 设置哈希 |
 | `materialize-approved-broad` | Reconstruction | Gate 3 汇总 approved | `fragment_plan.json`、源素材 → `material/`、`material_manifest.json` | 不改变 Gate 3 哈希；失败阻塞 Reconstruction，可重试 | Gate 3 bundle + 源 SHA |
+| `voice-preflight` | Reconstruction | Gate 3 汇总 approved、脚本候选和 fragment plan 可用 | `production_script_candidate.json`、`fragment_plan.json` → `voice_preflight.json` | 负 margin 阻塞 Gate 4 包和 TTS；图片不计算源时长预算 | 候选/范围/估算器/语速哈希 |
 | `generate-voice` | Reconstruction | Gate 4 生成前 approved | 批准脚本、TTS 设置 → voice 产物、实测时长 | 只写生成状态；失败不生成半成品、不自批 Gate 4 后状态 | 文本/TTS/协议哈希；外部服务错误为 `40` |
 | `build-reconstruction-timeline` | Reconstruction | 有完整实测音频和 material manifest | Gate 3 宽范围、实测时长 → `reconstruction_timeline.json`、SRT | 超宽范围返回受影响 Gate 3；不原地改 `fragment_plan.json` | 宽范围 + 音频 + 帧率哈希 |
 | `render-proxy` / `render-final` | Reconstruction | 前者需 Gate 4 生成后 approved；后者还需代理检查通过 | 精确时间轴、material、voice → 代理/正式 MP4 与报告 | 不自批 Gate 5；输入变化使旧渲染/Gate 5 stale | 全部渲染输入哈希 |
@@ -873,7 +876,14 @@ Gate 3 选材确认子状态齐全后，执行器为每句口播生成逐句证�
 
 通过矩阵后，Retrieval 只输出 `script_evidence_matrix.json` 和 `pass|blocked|review_required` 结果；每个 `evidence_window` 必须记录 `asset_id`、`media_type`、`source_start`、`source_end`（或起止帧）及 `approved_broad_range`，明确它属于 Gate 3 宽范围而非最终裁点。`review_required` 只允许在 Gate 3 审核包中由运营选择已批准候选、改用 Gate 2 fallback 或返回 Gate 2；没有明确决定不能自动转为 `pass`。Controlled Mutation 的 `build-production-script` 再将内容基线中的句子、已批准 fallback、画面证据、语义组和宽时长包络编译为 `production_script_candidate.json`。编译器必须记录 `content_baseline_hash`、`gate3_decision_hash`、`script_evidence_matrix_hash` 和编译器版本；不得静默删句、改弱声明或新增卖点，任何变化都必须命中 Gate 2 已批准的 fallback，否则返回 Gate 3 或 Gate 2。Gate 4 生成前通过后，才将候选提升为 `approved_production_script.json`，作为唯一 TTS 输入。
 
-#### 7.4.2 `generate-voice` 的固化边界
+#### 7.4.2 `voice-preflight` 与 `generate-voice` 的固化边界
+
+`voice-preflight` 是 TTS 前的硬阻塞检查，不是对真实音频时长的替代：
+
+- Gate 3 冻结的视频 `visual_duration_budget_seconds = approved_end - approved_start`；图片没有源视频预算，记录为 `null`；
+- 预检按逐段文案的非标点字数、标点停顿、音色历史平均语速和拟用语速估算 `voice_duration_estimate_seconds`，并记录 `voice_duration_margin_seconds = visual_budget - estimate`；
+- 任一视频 margin 为负时，不生成 Gate 4 审核包、不调用 TTS。恢复只能是缩短文案、使用 Gate 2 fallback、扩大 Gate 3 范围或返回 Gate 2 调整结构；
+- Gate 4 批准的语速必须与预检一致。TTS 完成后仍要用实测时长复核预算，超出时保留诊断音频但返回 Gate 3/4，不得变速、冻结尾帧或越过宽范围。
 
 TTS 执行器可以固化机械流程，但不能替运营批准文案、音色或品牌语气：
 
@@ -1157,6 +1167,7 @@ Retrieval 与 Reconstruction 的时间必须分别汇总：前者从素材覆盖
 - 短镜头不机械拆成短促独立 TTS；
 - 不删字、不变速、不补外部静音来强压参考时长；
 - 画面默认 1.00x，不使用长尾冻结补素材。
+- `voice_preflight.json` 必须在 Gate 4 生成前审核包之前通过；预估超出视频画面预算时不得调用 TTS。
 - `fragment_plan.json` 的 Gate 3 宽范围保持不可变，精确裁点只写 `reconstruction_timeline.json`；
 - 正式渲染前必须通过代理边界审查；
 - 静态图片无逐帧浮点缩放抖动；
@@ -1179,6 +1190,7 @@ Retrieval 与 Reconstruction 的时间必须分别汇总：前者从素材覆盖
 | Gate 3 批准后宽范围导出/复制 | Reconstruction | ≤ 30 秒 | ≤ 10 秒 |
 | 逐句证据矩阵（Retrieval） | Retrieval | ≤ 10 秒 | ≤ 3 秒 |
 | 生产脚本候选编译（Controlled Mutation） | Controlled Mutation | ≤ 10 秒 | ≤ 2 秒 |
+| Gate 3 后配音时长预检 | Reconstruction | ≤ 5 秒 | ≤ 3 秒 |
 | Gate 4 生成前确认包 | Controlled Mutation / Reconstruction 交接 | 用户确认前 ≤ 10 秒生成 | ≤ 3 秒 |
 | TTS 生成和媒体验证 | Reconstruction（Gate 4 生成前批准后） | ≤ 45 秒 | ≤ 45 秒；不复用未批准音频 |
 | 字幕、累计时间轴和 Gate 3 范围内精确裁点 | Reconstruction | ≤ 30 秒 | ≤ 10 秒 |
@@ -1186,9 +1198,9 @@ Retrieval 与 Reconstruction 的时间必须分别汇总：前者从素材覆盖
 | 正式渲染和验证 | Reconstruction | ≤ 5 分钟 | ≤ 5 分钟；完整输出哈希命中时无需重渲染 |
 | 端到端机器/API 关键路径 | 五阶段整体 | ≤ 13 分钟 | ≤ 8 分钟 |
 
-关键路径按新基线的严格依赖图计算：素材技术索引与参考片拆解可以并行；Gate 2 后先经过素材匹配和 Gate 3 两个子状态；Gate 3 汇总通过后，`materialize-approved-broad` 与“证据矩阵 + 脚本编译”两条支路可以并行，之后才进入 Gate 4 生成前确认、TTS、时间轴、Gate 4 生成后听审、代理审查和正式渲染。不得把两条支路相加，也不得再用 `max(TTS, matching)` 计算。人工 Gate 1–5 的确认时间全部只记入 `human_wait_seconds`，不进入机器/API SLA。
+关键路径按新基线的严格依赖图计算：素材技术索引与参考片拆解可以并行；Gate 2 后先经过素材匹配和 Gate 3 两个子状态；Gate 3 汇总通过后，`materialize-approved-broad` 与“证据矩阵 + 脚本编译”两条支路可以并行，之后依次进入 `voice-preflight`、Gate 4 生成前确认、TTS、实测预算复核、时间轴、Gate 4 生成后听审、代理审查和正式渲染。不得把两条支路相加，也不得再用 `max(TTS, matching)` 计算。人工 Gate 1–5 的确认时间全部只记入 `human_wait_seconds`，不进入机器/API SLA。
 
-缓存命中预算按依赖图逐项计算：`max(reference_split=20s, asset_index=5s) + blueprint_lint=3s + mutation_lint=2s + match_assets=10s + max(materialize_broad=10s, evidence_matrix=3s + script_compile=2s) + gate4_pre_package=3s + generate_voice=45s + build_timeline=10s + proxy_boundary=30s + render_final=300s = 433s`，约 7.2 分钟，向上预留为 8 分钟。Gate 3、Gate 4 生成前、Gate 4 生成后和 Gate 5 的人工等待均明确排除；完整输出 bundle 哈希命中时无需支付最后 300 秒正式渲染。冷启动和热缓存目标都必须按同一依赖图实测，不能用估算数字替代验收。
+缓存命中预算按依赖图逐项计算：`max(reference_split=20s, asset_index=5s) + blueprint_lint=3s + mutation_lint=2s + match_assets=10s + max(materialize_broad=10s, evidence_matrix=3s + script_compile=2s) + voice_preflight=3s + gate4_pre_package=3s + generate_voice=45s + build_timeline=10s + proxy_boundary=30s + render_final=300s = 436s`，约 7.3 分钟，向上预留为 8 分钟。Gate 3、Gate 4 生成前、Gate 4 生成后和 Gate 5 的人工等待均明确排除；完整输出 bundle 哈希命中时无需支付最后 300 秒正式渲染。冷启动和热缓存目标都必须按同一依赖图实测，不能用估算数字替代验收。
 
 目标是优化同规模任务的可重复执行，不承诺对超长视频、损坏媒体、外部 API 限流或用户等待使用相同 SLA。13/8 分钟只统计机器/API critical path，不包含 Gate 1–4/5 的运营等待；运营墙钟另行显示 `human_wait_seconds` 和 `rework_seconds`。
 
@@ -1311,7 +1323,7 @@ WP-B0 验收：相同输入第二次运行可报告 `cache_hit`，上游变更�
 
 目标：Gate 4 生成前确认后，才生成真实配音，并以实测音频稳定重建字幕、画面和成片；Gate 4 生成后先听审音频与时间轴，批准后才运行代理边界审查和正式渲染。
 
-产出范围：Gate 3 汇总通过后将批准宽范围复制/导出到 `material/` 并写 `material_manifest.json`；只消费 Controlled Mutation 已提升的 `approved_production_script.json` 执行 TTS、实测音频时长、字幕与 `reconstruction_timeline.json`，在 Gate 3 范围内确定精确裁点；先完成 Gate 4 生成后音频/时间轴听审，再做代理/边界审查、正式渲染和 Gate 5 交付包。
+产出范围：Gate 3 汇总通过后将批准宽范围复制/导出到 `material/` 并写 `material_manifest.json`；先以 Gate 3 视频画面预算和生产脚本候选生成 `voice_preflight.json`，通过后才创建 Gate 4 生成前审核包；只消费 Controlled Mutation 已提升的 `approved_production_script.json` 执行 TTS，实测音频再次复核预算后生成字幕与 `reconstruction_timeline.json`，并在 Gate 3 范围内确定精确裁点；先完成 Gate 4 生成后音频/时间轴听审，再做代理/边界审查、正式渲染和 Gate 5 交付包。
 
 ### 11.3 Track C：评分卡与成熟度体系（观测仪表，G-B 通过后启动，瘦身版）
 
@@ -1333,6 +1345,8 @@ WP-B0 验收：相同输入第二次运行可报告 `cache_hit`，上游变更�
 WP-C 验收（门槛 G-C）：评分卡能由机器自动生成、与已实测 `stage_metrics.jsonl` 数据一致、五阶段 `framework_stage_id` 恰好五项且 `retrieval`/`reconstruction` 独立；不再依赖人工抄录回溯分。
 
 ### 11.4 Phase 6：冻结案例前向验证与发布晋级（门槛 G-B，非业务阶段）
+
+实施状态（2026-08-16）：隔离冷/热缓存、受控视觉变更、审批隔离、跨运行缓存拒绝、V1 可比性校验和最小 `phase6_score_snapshot.json` 生成器已在 Track B 隔离 fixture 中实现并通过测试。Native Runner 已通过正式 CLI 的显式 runtime config 接入；`gb-pair` 已用真实冻结输入完成 cold/hot 的 ffprobe/ffmpeg/TTS 全链路，双方 Gate 1–5 均由独立审核包批准并通过最终技术校验。cold Gate 5 后只复制声明的 SQLite cache，hot 以独立 `run_id` 启动并保留自己的增量索引；配对记录当前为 `measured_pending_review`，机器关键路径已测得 cold 32.178 秒、hot 36.183 秒。V1 可比性、人工运营计时和 owner G-B 阈值仍未复核，因此 G-B 尚未通过，普通 V2 生产和共享缓存继续锁定。
 
 Phase 6 是 Track B 的出口门槛 G-B，同时为 Track C 的启动前置。目标：证明五阶段质量没有因提速回退、关键路径达到 13/8 分钟硬线，并为 `2.0.0-rc.1` 提供可回滚证据；正式 `2.0.0` 必须等待 G-C 及其后的 owner 发布批准。
 

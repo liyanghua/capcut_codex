@@ -18,6 +18,7 @@ from typing import Any
 
 VIDEO_EXTENSIONS = frozenset({".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"})
 IMAGE_EXTENSIONS = frozenset({".gif", ".heic", ".jpeg", ".jpg", ".png", ".webp"})
+ASSET_INDEX_IMPLEMENTATION_VERSION = "asset-index-v2"
 
 
 class AssetIndexPrerequisiteError(RuntimeError):
@@ -30,6 +31,7 @@ class AssetIndexRetryableError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class IndexSummary:
+    implementation_version: str
     discovered_files: int
     supported_files: int
     unsupported_files: int
@@ -141,9 +143,13 @@ class AssetIndexer:
         database_path: Path,
         *,
         probe: Callable[[Path, str], dict[str, object]] | None = None,
+        implementation_version: str = ASSET_INDEX_IMPLEMENTATION_VERSION,
     ) -> None:
+        if not isinstance(implementation_version, str) or not implementation_version:
+            raise ValueError("asset index implementation_version is required")
         self.database_path = Path(database_path).resolve(strict=False)
         self.probe = probe or FFprobeAdapter()
+        self.implementation_version = implementation_version
         self._database_initialized = False
 
     def _connect(self) -> sqlite3.Connection:
@@ -191,9 +197,24 @@ class AssetIndexer:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
-                INSERT INTO metadata(key, value) VALUES ('schema_version', '2')
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value;
                 """
+            )
+            current = connection.execute(
+                "SELECT value FROM metadata WHERE key = 'implementation_version'"
+            ).fetchone()
+            if current is None or current[0] != self.implementation_version:
+                connection.execute("DELETE FROM files")
+                connection.execute("DELETE FROM scan_errors")
+                connection.execute("DELETE FROM contents")
+            connection.execute(
+                """INSERT INTO metadata(key, value) VALUES ('schema_version', '2')
+                   ON CONFLICT(key) DO UPDATE SET value = excluded.value"""
+            )
+            connection.execute(
+                """INSERT INTO metadata(key, value)
+                   VALUES ('implementation_version', ?)
+                   ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+                (self.implementation_version,),
             )
 
     def _prepare_database(self, asset_root: Path) -> Path:
@@ -361,6 +382,7 @@ class AssetIndexer:
             )
 
         return IndexSummary(
+            implementation_version=self.implementation_version,
             discovered_files=discovered,
             supported_files=supported,
             unsupported_files=unsupported,

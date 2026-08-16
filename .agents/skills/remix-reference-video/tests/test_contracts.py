@@ -9,7 +9,9 @@ from pathlib import Path
 from remix_reference_video import (
     CommandResult,
     ExecutionPlan,
+    PipelineState,
     PlanValidationError,
+    project_runtime_state,
 )
 
 
@@ -312,6 +314,65 @@ class ExecutionPlanTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(PlanValidationError, "gate"):
                     self.parse_object(value)
+
+
+class PipelineStateTests(unittest.TestCase):
+    @staticmethod
+    def valid_state(**overrides: object) -> dict[str, object]:
+        state: dict[str, object] = {
+            "execution_mode": "track-b-production",
+            "run_id": "run-1",
+            "state_revision": 3,
+            "active_stage": "retrieval",
+            "active_command": "match-assets",
+            "stage_status": {
+                "performance_proven_video": "succeeded",
+                "retrieval": "running",
+            },
+            "gate_status": {
+                "gate1": "approved",
+                "gate2": "approved",
+                "gate3_material_selection": "awaiting_user",
+                "gate3_evidence_closure": "not_ready",
+                "gate3": "awaiting_user",
+            },
+            "decisions": [],
+            "artifacts": {},
+            "blockers": [],
+            "cache_summary": {},
+        }
+        state.update(overrides)
+        return state
+
+    def test_parses_authoritative_track_b_state(self) -> None:
+        state = PipelineState.from_object(self.valid_state())
+
+        self.assertEqual(state.execution_mode, "track-b-production")
+        self.assertEqual(state.state_revision, 3)
+        self.assertEqual(state.gate_status["gate3_material_selection"], "awaiting_user")
+
+    def test_rejects_invalid_identity_revision_work_and_gate_status(self) -> None:
+        invalid = [
+            {"execution_mode": "manual-contract-only"},
+            {"run_id": ""},
+            {"state_revision": -1},
+            {"stage_status": {"retrieval": "approved"}},
+            {"gate_status": {"gate3_material_selection": "running"}},
+            {"gate_status": {"unknown": "approved"}},
+        ]
+        for override in invalid:
+            with self.subTest(override=override), self.assertRaises(PlanValidationError):
+                PipelineState.from_object(self.valid_state(**override))
+
+    def test_legacy_projection_never_invents_production_mode(self) -> None:
+        projection = project_runtime_state(
+            {"run_id": "legacy", "gate_status": {"gate1": "approved"}}
+        )
+
+        self.assertFalse(projection["supported"])
+        self.assertIsNone(projection["execution_mode"])
+        self.assertIsNone(projection["active_stage"])
+        self.assertIsNone(projection["state_revision"])
 
 
 class CommandResultTests(unittest.TestCase):

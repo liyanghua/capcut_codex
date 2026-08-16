@@ -3,13 +3,23 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from remix_reference_video.cli import main
+from remix_reference_video.cli import (
+    _gb_pair_status,
+    _pair_side_complete,
+    _pair_side_halted,
+    _pending_pair_gate,
+    _production_runner,
+    main,
+)
+from remix_reference_video.production_runtime import ProductionRuntimeConfig
 from remix_reference_video.storage import TaskStorage
 
 
@@ -61,6 +71,64 @@ class CliTests(unittest.TestCase):
         path = self.workspace / "plan.json"
         path.write_text(json.dumps(plan), encoding="utf-8")
         return path
+
+    def test_production_runner_factory_registers_real_native_dag(self) -> None:
+        task = self.workspace / "work" / "real-task"
+        task.mkdir()
+        reference = task / "reference.mp4"
+        reference.write_bytes(b"reference")
+        assets = self.workspace / "assets"
+        assets.mkdir()
+        brief = task / "project_brief.yaml"
+        brief.write_text("{}", encoding="utf-8")
+        profiles = task / "asset_profiles.json"
+        profiles.write_text('{"asset_profiles": []}', encoding="utf-8")
+        client = task / "tts_client.py"
+        client.write_text("# fixture", encoding="utf-8")
+
+        runner = _production_runner(
+            task,
+            reference,
+            asset_root=assets,
+            brief_path=brief,
+            asset_profiles_path=profiles,
+            cache_path=task / "cache" / "assets.sqlite3",
+            doubao_client_script=client,
+        )
+
+        self.assertIn("build-production-script", runner.adapters)
+        self.assertIn("generate-voice", runner.adapters)
+        self.assertIn("render-final", runner.adapters)
+
+    def test_runtime_config_rejects_secret_fields_before_task_state_write(self) -> None:
+        task = self.workspace / "work" / "config-task"
+        task.mkdir()
+        config = task / "production_runtime_config.json"
+        config.write_text(
+            json.dumps({"artifact_type": "production_runtime_config", "api_key": "secret"}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ValueError, "secret"):
+            ProductionRuntimeConfig.from_file(config)
+
+    def test_production_status_alias_matches_status_projection(self) -> None:
+        state = {
+            "run_id": "production-alias",
+            "execution_mode": "track-b-production",
+            "state_revision": 4,
+            "gate_status": {"gate5": "awaiting_user"},
+        }
+        (self.task / "pipeline_state.json").write_text(json.dumps(state), encoding="utf-8")
+        status_code, status_stdout, _ = self.invoke(
+            "status", "--task-dir", str(self.task), "--json"
+        )
+        alias_code, alias_stdout, _ = self.invoke(
+            "production-status", "--task-dir", str(self.task), "--json"
+        )
+        self.assertEqual(status_code, 0)
+        self.assertEqual(alias_code, 0)
+        self.assertEqual(json.loads(alias_stdout), json.loads(status_stdout))
 
     def test_fast_resume_status_and_audit_json_workflow(self) -> None:
         plan = self.write_plan()
@@ -275,6 +343,7 @@ class CliTests(unittest.TestCase):
         cold = json.loads(cold_stdout)
         warm = json.loads(warm_stdout)
         self.assertEqual(cold_code, 0)
+        self.assertEqual(cold["implementation_version"], "asset-index-v2")
         self.assertEqual(cold["supported_files"], 1)
         self.assertEqual(cold["unreadable_files"], 1)
         self.assertEqual(warm_code, 0)
@@ -358,6 +427,128 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(blocked_code, 4)
         self.assertEqual(json.loads(blocked_stdout)["error_code"], "MANUAL_CONTRACT_ONLY")
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg required")
+    def test_isolated_production_fixture_runs_to_gate1_and_resume_waits(self) -> None:
+        source = self.workspace / "source.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                "-i", "color=c=red:s=160x240:r=10:d=0.4", "-f", "lavfi", "-i",
+                "color=c=blue:s=160x240:r=10:d=0.4", "-filter_complex",
+                "[0:v][1:v]concat=n=2:v=1:a=0[outv]", "-map", "[outv]", "-c:v",
+                "libx264", "-pix_fmt", "yuv420p", str(source),
+            ],
+            check=True,
+        )
+        task = self.workspace / "work" / "production-fixture"
+        with patch("remix_reference_video.cli._require_track_b_unlocked"):
+            init_code, _, _ = self.invoke(
+                "init", "--workspace-root", str(self.workspace), "--task-dir", str(task),
+                "--reference", str(source), "--json",
+            )
+            copied = task / source.name
+            run_code, run_stdout, _ = self.invoke(
+                "run", "--task-dir", str(task), "--reference", str(copied), "--json"
+            )
+            before_resume = {
+                path.relative_to(task): path.read_bytes()
+                for path in task.rglob("*")
+                if path.is_file()
+            }
+            status_code, status_stdout, _ = self.invoke(
+                "status", "--task-dir", str(task), "--json"
+            )
+            audit_code, audit_stdout, _ = self.invoke(
+                "audit", "--task-dir", str(task), "--json"
+            )
+            resume_code, resume_stdout, _ = self.invoke(
+                "resume", "--task-dir", str(task), "--reference", str(copied), "--json"
+            )
+
+        self.assertEqual(init_code, 0)
+        self.assertEqual(run_code, 3)
+        self.assertEqual(json.loads(run_stdout)["status"], "awaiting_user")
+        self.assertEqual(status_code, 0)
+        self.assertEqual(json.loads(status_stdout)["gate_status"], "awaiting_user")
+        self.assertEqual(audit_code, 0)
+        self.assertEqual(json.loads(audit_stdout)["status"], "passed")
+        self.assertEqual(resume_code, 3)
+        self.assertEqual(json.loads(resume_stdout)["status"], "awaiting_user")
+        state = TaskStorage(task).read_state()
+        self.assertEqual(state["gate_status"]["gate1"], "awaiting_user")
+        self.assertEqual(state["decisions"], [])
+        self.assertEqual(
+            before_resume,
+            {
+                path.relative_to(task): path.read_bytes()
+                for path in task.rglob("*")
+                if path.is_file()
+            },
+        )
+
+    def test_gb_pair_requires_frozen_marker_before_creating_tasks(self) -> None:
+        frozen = self.workspace / "frozen"
+        assets = self.workspace / "assets"
+        frozen.mkdir()
+        assets.mkdir()
+        cold = self.workspace / "cold"
+        hot = self.workspace / "hot"
+        pair = self.workspace / "pair"
+        client = self.workspace / "tts.py"
+        client.write_text("# client", encoding="utf-8")
+        code, stdout, _ = self.invoke(
+            "gb-pair",
+            "--frozen-root", str(frozen),
+            "--asset-root", str(assets),
+            "--cold-task-dir", str(cold),
+            "--hot-task-dir", str(hot),
+            "--pair-root", str(pair),
+            "--doubao-client", str(client),
+            "--json",
+        )
+        self.assertEqual(code, 4)
+        self.assertEqual(json.loads(stdout)["status"], "blocked")
+        self.assertFalse(cold.exists())
+        self.assertFalse(hot.exists())
+
+    def test_gb_pair_waits_for_gate5_package_before_requesting_approval(self) -> None:
+        state = {"gate_status": {"gate5": "awaiting_user"}}
+
+        self.assertIsNone(_pending_pair_gate(self.task, state))
+        package = self.task / "gate_review_packages" / "gate5.json"
+        package.parent.mkdir()
+        package.write_text("{}\n", encoding="utf-8")
+
+        self.assertEqual(_pending_pair_gate(self.task, state), "gate5")
+
+    def test_gb_pair_side_is_complete_at_approved_gate5(self) -> None:
+        self.assertTrue(
+            _pair_side_complete({"gate_status": {"gate5": "approved"}})
+        )
+        self.assertFalse(
+            _pair_side_complete({"gate_status": {"gate5": "awaiting_user"}})
+        )
+
+    def test_gb_pair_side_stops_at_preflight_blocker(self) -> None:
+        self.assertTrue(
+            _pair_side_halted(
+                {"gate_status": {"gate4_pre_generation": "blocked"}}
+            )
+        )
+        self.assertFalse(
+            _pair_side_halted(
+                {"gate_status": {"gate4_pre_generation": "not_ready"}}
+            )
+        )
+
+    def test_gb_pair_status_reports_hot_gate_wait(self) -> None:
+        status, _ = _gb_pair_status(
+            {"status": "succeeded", "gate_status": {"gate5": "approved"}},
+            {"status": "awaiting_user", "gate_status": {"gate1": "awaiting_user"}},
+        )
+
+        self.assertEqual(status, "awaiting_user")
 
     @staticmethod
     def _approve_gate(state: dict[str, object], gate_id: str) -> dict[str, object]:

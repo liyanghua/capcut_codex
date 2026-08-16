@@ -83,6 +83,29 @@ class AssetIndexerTests(unittest.TestCase):
         self.assertEqual(removed.removed_files, 1)
         self.assertEqual(indexer.files(self.assets), [])
 
+    def test_implementation_version_change_invalidates_shared_cache(self) -> None:
+        (self.assets / "clip.mp4").write_bytes(b"media")
+        first_probe = RecordingProbe()
+        first = AssetIndexer(
+            self.database,
+            probe=first_probe,
+            implementation_version="index-v1",
+        )
+        first.index(self.assets)
+        self.assertEqual(first.index(self.assets).cache_hits, 1)
+
+        second_probe = RecordingProbe()
+        changed = AssetIndexer(
+            self.database,
+            probe=second_probe,
+            implementation_version="index-v2",
+        ).index(self.assets)
+
+        self.assertEqual(changed.cache_hits, 0)
+        self.assertEqual(changed.hashed_files, 1)
+        self.assertEqual(changed.probed_contents, 1)
+        self.assertEqual(len(second_probe.calls), 1)
+
     def test_unreadable_media_is_recorded_and_reused_without_reprobe(self) -> None:
         (self.assets / "broken.mp4").write_bytes(b"not-media")
         probe = RecordingProbe({"broken.mp4"})

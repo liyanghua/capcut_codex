@@ -40,6 +40,7 @@ EXPECTED_ACTIVE_ARTIFACTS = {
     "production_script_candidate",
     "approved_production_script",
     "material_manifest",
+    "voice_preflight",
     "voice_script",
     "voice_manifest",
     "duration_report",
@@ -178,7 +179,10 @@ def main(argv: list[str] | None = None) -> int:
         schema_id = properties.get("schema_id", {}).get("const")
         if artifact_type and schema_id:
             schema_pairs.add((artifact_type, schema_id))
-    if schema_pairs != registered_pairs:
+    handoff = registry.get("x-stage-input-contract", {})
+    handoff_pair = (handoff.get("artifact_type"), handoff.get("schema_id"))
+    expected_schema_pairs = registered_pairs | {handoff_pair}
+    if schema_pairs != expected_schema_pairs:
         fail("registry oneOf type/schema ID bindings must exactly match active artifacts")
 
     brief_path = SKILL_ROOT / "assets" / "project_brief.yaml"

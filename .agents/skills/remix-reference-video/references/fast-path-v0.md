@@ -4,7 +4,7 @@
 
 Fast Path v0 是五阶段外部的实验执行层，不是第六个业务阶段。它负责按已声明的 argv 顺序执行机器步骤、检查人工 Gate、记录实耗时、验证产物哈希、从有效缓存续跑，并为 `assets/` 建立共享技术索引。
 
-它不生成业务判断，也不自动批准 Gate。当前版本尚未提供 Performance-proven Video、Blueprint、Controlled Mutation、Retrieval、Reconstruction 五阶段的通用生产生成器；只有这些真实命令接入同一 plan 后，才能验证完整视频是否达到一小时目标。
+它不生成业务判断，也不自动批准 Gate。Track B 另有 native adapter runner：当前已接入真实参考视频切分并提供受 manifest 锁保护的 `init/run/stage/resume` 开发入口，其余阶段 adapter 已有独立契约测试，但尚未形成可对一线开放的完整 registry。只有隔离端到端 Gate fixture、G-B 冻结配对和监督运营试用全部通过后，才能验证完整视频是否达到一小时目标。
 
 ## 五阶段对应关系
 
@@ -27,6 +27,7 @@ Fast Path v0 是五阶段外部的实验执行层，不是第六个业务阶段�
 - 状态、事件、指标和锁文件拒绝 symlink；严格 JSON 读取拒绝重复键和无效 UTF-8。
 - 素材文件读取失败会按路径持久记录并在恢复后清除；FFprobe 缺失属于可重试环境失败，不缓存成素材损坏。
 - 当前 `manual-contract-only` pilot 只允许 `status` 和 `audit`；`fast`、`resume` 必须无写入拒绝。
+- `init/run/stage/resume` 在检查 manifest 锁之前不得创建任务目录、状态、锁、缓存或媒体。当前 manifest 仍关闭普通 V2 production，因此这些命令只在临时隔离测试中验证，不存在用户侧绕过参数。
 
 ### WP-A2 G-A Evidence Harness
 
@@ -65,6 +66,28 @@ uv run python scripts/remixctl.py audit \
 uv run python scripts/remixctl.py index-assets \
   --assets-root /absolute/project/root/assets \
   --database /absolute/project/root/.cache/remix-reference-video/assets.sqlite3
+```
+
+Track B native runner 的开发命令形态如下；当前生产锁开启时会在任何写入前退出：
+
+```bash
+uv run python scripts/remixctl.py init \
+  --workspace-root /absolute/project/root \
+  --task-dir /absolute/project/root/work/YYYY-MM-DD-slug \
+  --reference /absolute/project/root/inbox/reference.mp4
+
+uv run python scripts/remixctl.py run \
+  --task-dir /absolute/project/root/work/YYYY-MM-DD-slug \
+  --reference /absolute/project/root/work/YYYY-MM-DD-slug/reference.mp4
+
+uv run python scripts/remixctl.py stage \
+  --task-dir /absolute/project/root/work/YYYY-MM-DD-slug \
+  --reference /absolute/project/root/work/YYYY-MM-DD-slug/reference.mp4 \
+  --stage split-reference
+
+uv run python scripts/remixctl.py resume \
+  --task-dir /absolute/project/root/work/YYYY-MM-DD-slug \
+  --reference /absolute/project/root/work/YYYY-MM-DD-slug/reference.mp4
 ```
 
 每个命令均可增加 `--json`，供后续 FastAPI 或自动化调用。
@@ -119,7 +142,7 @@ fixture 只能复制到临时 workspace 运行，不能直接在 Skill 安装目
 | 现有回归 | Track A 2、matcher 46、Gate 4 6、时间轴 1、Gate 5 2、字幕叠层 2，共 `59/59` 通过 |
 | `assets/` 冷索引 | 7 个支持文件，7 次哈希、7 次 FFprobe、0 个不可读，`0.485973s` |
 | `assets/` 暖索引 | 7/7 cache hit，0 次哈希、0 次 FFprobe、`0.004557s` |
-| pilot 只读状态 | `final_review`，`gate5=approved`；pilot 已完成但 G-A 未通过，Fast Path 仍只允许只读 `status/audit` |
+| pilot 只读状态 | `final_review`，`gate5=approved`；pilot 即使完成且 G-A 已由独立 clean harness 通过，仍保持 `manual-contract-only`、不归档且只允许只读 `status/audit` |
 | pilot 全文件摘要 | `status/audit` 前后均为 `480eb3dc6415d1ffd7c44c5bafbf12a937cd1d78fba1aa9718b2d52b7c03fd7b` |
 | Skill 包校验 | 官方 `quick_validate.py` 返回 `Skill is valid!` |
 

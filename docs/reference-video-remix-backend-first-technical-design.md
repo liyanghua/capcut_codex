@@ -1,10 +1,10 @@
 # 参考视频复刻 Skill：后端优先升级与进度看板技术设计
 
-> **文档状态：已确认的设计基线，Track B 尚未实现**  
+> **文档状态：已确认的设计基线，Track B 正在按计划实施**
 > **编写日期：2026-08-15**  
-> 本文由 `docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 细化而来；不代表 Track B 已实现，也不改变当前任务的 Gate 状态。
+> 本文由 `docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 细化而来；实现状态见 `docs/remix-production-backend-implementation-status.md`，不改变任何任务的 Gate 状态。
 
-当前替代 pilot `work/2026-08-15-tablemat-ga-replacement-pilot/` 已通过 Gate 5，但 G-A 仍未通过。Track B 继续 `locked_until_g_a`。G-A 通过前只允许设计、计划、隔离测试和锁护栏；真实执行器、生产缓存和普通 V2 任务必须等待 owner 记录的干净 G-A 通过。
+当前替代 pilot `work/2026-08-15-tablemat-ga-replacement-pilot/` 已通过 Gate 5，但按 contract 仍留在 `work/`，不能复用审批。独立 clean harness 的 G-A 已通过；Track B 后端已接入正式 CLI，但 manifest 继续把普通生产和共享缓存锁在 G-B 之前。`gb-pair` 是唯一的隔离测量例外；真实 cold/hot 配对已各自通过 Gate 5，当前记录为 `measured_pending_review`，尚不能据此宣称 G-B 或一线发布，仍需 V1 可比性和 owner 阈值复核。
 
 实施入口：[生产后端设计规格](superpowers/specs/2026-08-15-remix-production-backend-design.md) · [实施计划](superpowers/plans/2026-08-15-remix-production-backend.md)
 
@@ -44,7 +44,7 @@ flowchart LR
 - `manual_forward_log.json` 尚未补齐 Gate 4 顺序、配音后是否返工及完整效率字段；
 - manifest 仍将 Track B 标记为 `locked_until_g_a`。
 
-因此，Track B 的第一步是完成 G-A 证据收口，不是重做已有 pilot，也不把 pilot 产物当作新执行器的正向 golden fixture。
+因此，Track B 的实现以独立 clean harness 的 G-A 证据为准，不重做已有 pilot，也不把替代 pilot 产物当作新执行器的正向 golden fixture。
 
 ### 2.2 可复用与不可复用范围
 
@@ -61,6 +61,16 @@ flowchart LR
 - 参考片拆解、素材索引、两遍 Blueprint、受控变更、Retrieval、Reconstruction；
 - FastAPI JSON 读取接口和 SSE 变化通知；
 - G-B 冷/热缓存配对验收。
+
+### 3.3 正式 CLI 与隔离配对入口
+
+正式 CLI 使用 `.agents/skills/remix-reference-video/scripts/remixctl.py`：
+
+- `production-run|production-resume|production-stage --task-dir ... --reference ... --runtime-config ...`：构建完整 Native Registry；普通 Track B 任务仍由 manifest 锁拒绝。
+- `production-status|production-audit --task-dir ...`：只读读取生产状态和登记产物。
+- `gb-pair --frozen-root ... --asset-root ... --cold-task-dir ... --hot-task-dir ... --pair-root ... --doubao-client ...`：验证冻结输入、创建独立 cold/hot 根目录并记录配对证据；可选 `--decision-dir` 只消费本次任务的新 Gate 决定。
+
+`gb-pair` 不复制审批、状态、审核包、渲染输出或绝对源路径；cold 未完成 Gate 5 前不复制 cache，也不会运行归档节点。当前实测记录在 `work/2026-08-16-gb-pair-real-2/gb_measurement.json`：cold/hot 均已完成 Gate 1–5，真实 TTS/FFmpeg、预算校验、代理检查、最终渲染和独立审批均通过；hot 成片 27.552 秒。配对仍标为 `measured_pending_review`，因为 V1 可比性与 owner G-B 阈值尚未完成。
 
 ### 3.2 本阶段不包含
 

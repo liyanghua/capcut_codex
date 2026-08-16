@@ -56,10 +56,10 @@ Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -m unittest .ag
 
 Expected: FAIL because the new fields and substate validation are not implemented.
 
-- [ ] **Step 3: Implement minimal typed contract changes** without changing V1 schema behavior. Preserve V2 envelope fields and reject unknown/invalid Gate states.
-- [ ] **Step 4: Add migration-safe defaults** for existing alpha pilot read-only inspection: missing runtime fields remain explicit `null`/unsupported, never silently become `track-b-production`.
-- [ ] **Step 5: Run the focused tests again** and verify PASS.
-- [ ] **Step 6: Commit** `feat: define track b state and gate substate contracts`.
+- [x] **Step 3: Implement minimal typed contract changes** without changing V1 schema behavior. Preserve V2 envelope fields and reject unknown/invalid Gate states.
+- [x] **Step 4: Add migration-safe defaults** for existing alpha pilot read-only inspection: missing runtime fields remain explicit `null`/unsupported, never silently become `track-b-production`.
+- [x] **Step 5: Run the focused tests again** and verify PASS.
+- [x] **Step 6: Commit** `feat: define track b state and gate substate contracts`.
 
 ### Task 2: Implement transaction journal, atomic state writes, events, and metrics
 
@@ -71,15 +71,15 @@ Expected: FAIL because the new fields and substate validation are not implemente
 
 - [ ] **Step 1: Write failing tests** for prepared/committed transactions, state-before-event recovery, event-before-metrics recovery, orphan artifact cleanup, idempotent transaction replay, and revision conflict rejection.
 - [ ] **Step 2: Run the focused tests** and confirm the failures describe missing reconciliation behavior.
-- [ ] **Step 3: Implement** `.transactions/<transaction_id>.json`, expected-revision checks, staging manifest, immutable versioned artifact references, atomic state replacement, idempotent event append, and reconciliation rules from the design spec.
-- [ ] **Step 4: Ensure metrics gaps become `measurement_status=partial`**, never zero seconds and never a Gate approval change.
-- [ ] **Step 5: Run tests with `-W error::ResourceWarning`**.
+- [x] **Step 3: Implement** `.transactions/<transaction_id>.json`, expected-revision checks, staging manifest, immutable versioned artifact references, atomic state replacement, idempotent event append, and reconciliation rules from the design spec.
+- [x] **Step 4: Ensure metrics gaps become `measurement_status=partial`**, never zero seconds and never a Gate approval change.
+- [x] **Step 5: Run tests with `-W error::ResourceWarning`**.
 
 Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -W error::ResourceWarning -m unittest .agents/skills/remix-reference-video/tests/test_transactions.py .agents/skills/remix-reference-video/tests/test_storage.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit** `feat: add recoverable task transactions and audit events`.
+- [x] **Step 6: Commit** `feat: add recoverable task transactions and audit events`.
 
 ### Task 3: Add Approval Service and `approve-gate`
 
@@ -91,16 +91,16 @@ Expected: PASS.
 - Test: `.agents/skills/remix-reference-video/tests/test_cli.py`
 
 - [ ] **Step 1: Write failing tests** for trusted-server approval timestamps, review-package hash mismatch, stale revision, out-of-order timestamps, incomplete Gate 3/4 substate, cross-task approval rejection, and idempotent repeated approval.
-- [ ] **Step 2: Implement** `approve-gate --task-dir --gate --review-package-hash --decision-file --actor` as the only state-writing approval command. The decision file must validate against a schema with enumerated `decision`, `scope_type`, `scope_ids`, and strategy fields; free-form notes are advisory only and cannot encode approval policy. Actor identity is required and is recorded by the trusted service.
-- [ ] **Step 3: Implement the Gate 4 pre-generation transaction** that promotes the candidate plus TTS settings to immutable `approved_production_script.json` before setting `gate4_pre_generation=approved`.
-- [ ] **Step 4: Add structured exit codes** for invalid command, awaiting Gate, blocked policy, audit failure, and successful approval.
-- [ ] **Step 5: Run focused CLI and approval tests**.
+- [x] **Step 2: Implement** `approve-gate --task-dir --gate --review-package-hash --decision-file --actor` as the only state-writing approval command. The decision file must validate against a schema with enumerated `decision`, `scope_type`, `scope_ids`, and strategy fields; free-form notes are advisory only and cannot encode approval policy. Actor identity is required and is recorded by the trusted service.
+- [x] **Step 3: Implement the Gate 4 pre-generation transaction** that promotes the candidate plus TTS settings to immutable `approved_production_script.json` before setting `gate4_pre_generation=approved`.
+- [x] **Step 4: Add structured exit codes** for invalid command, awaiting Gate, blocked policy, audit failure, and successful approval.
+- [x] **Step 5: Run focused CLI and approval tests**.
 
 Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -W error::ResourceWarning -m unittest .agents/skills/remix-reference-video/tests/test_approvals.py .agents/skills/remix-reference-video/tests/test_cli.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit** `feat: add hash-bound gate approval service`.
+- [x] **Step 6: Commit** `feat: add hash-bound gate approval service`.
 
 ### Task 4: Build the explicit DAG orchestrator
 
@@ -112,10 +112,10 @@ Expected: PASS.
 - Modify: `.agents/skills/remix-reference-video/tests/test_runner.py`
 
 - [ ] **Step 1: Write failing tests** for Gate stop, exact next-node selection, parallel-safe read-only nodes, blocked/stale propagation, attempt IDs, and no self-approval.
-- [ ] **Step 2: Define adapter interface** with `required_inputs`, `required_gates`, `declared_outputs`, `cache_fingerprint`, and `execute`.
-- [ ] **Step 3: Implement DAG selection** for the normative sequence in the design spec, including Gate 3 and Gate 4 summaries.
-- [ ] **Step 4: Implement `run`, `stage`, `resume`, `status`, and `audit` through the orchestrator**, preserving Fast Path v0 fixture behavior.
-- [ ] **Step 5: Run all B0 tests**.
+- [x] **Step 2: Define adapter interface** with `required_inputs`, `required_gates`, `declared_outputs`, `cache_fingerprint`, and `execute`.
+- [x] **Step 3: Implement DAG selection** for the normative sequence in the design spec, including Gate 3 and Gate 4 summaries.
+- [x] **Step 4: Implement `run`, `stage`, `resume`, `status`, and `audit` through the orchestrator**, preserving Fast Path v0 fixture behavior.
+- [x] **Step 5: Run all B0 tests**.
 
 Run: `PYTHONPATH=.agents/skills/remix-reference-video/src python -W error::ResourceWarning -m unittest discover -s .agents/skills/remix-reference-video/tests -p 'test_*.py'`
 
@@ -131,10 +131,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/tests/test_artifact_validator.py`
 
 - [ ] **Step 1: Write failing tests** for envelope/shape, artifact hash references, path allowlist, symlink escape, Gate 3 broad-range containment, timeline containment, and Gate 5 output bundle.
-- [ ] **Step 2: Implement validator results as structured data**; validators must not mutate state or approve a Gate.
-- [ ] **Step 3: Wire validation into staging promotion and `audit`**.
-- [ ] **Step 4: Run the focused validator and all regression tests**.
-- [ ] **Step 5: Commit** `feat: validate complete remix artifacts before promotion`.
+- [x] **Step 2: Implement validator results as structured data**; validators must not mutate state or approve a Gate.
+- [x] **Step 3: Wire validation into staging promotion and `audit`**.
+- [x] **Step 4: Run the focused validator and all regression tests**.
+- [x] **Step 5: Commit** `feat: validate complete remix artifacts before promotion`.
 
 ### Task 6: Add B0 isolated fixture and prove no runtime activation before G-A (Pre-G-A)
 
@@ -160,9 +160,9 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/src/remix_reference_video/adapters/asset_index.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_stage_adapters.py`
 
-- [ ] **Step 1: Write failing adapter tests** for declared inputs, outputs, Gate 1 stop, implementation version, and cache fingerprint.
-- [ ] **Step 2: Implement adapters as orchestration wrappers** around existing deterministic tools; do not put content analysis logic in the orchestrator.
-- [ ] **Step 3: Run focused adapter tests** and commit `feat: add reference and index stage adapters`.
+- [x] **Step 1: Write failing adapter tests** for declared inputs, outputs, Gate 1 stop, implementation version, and cache fingerprint.
+- [x] **Step 2: Implement declarative adapter manifests**; content execution remains outside the orchestrator and is connected in Task 8.
+- [x] **Step 3: Run focused adapter tests** and commit `feat: define reference and index adapter manifests`.
 
 ### Task 8: Connect incremental technical asset indexing
 
@@ -171,11 +171,11 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Modify: `.agents/skills/remix-reference-video/src/remix_reference_video/cli.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_asset_index.py`
 
-- [ ] **Step 1: Add tests** for cold index, warm cache hit, content hash change, unreadable media, probe timeout retry, and path escape.
-- [ ] **Step 2: Implement `index-assets` through the shared cache root** with explicit implementation-bound keys.
-- [ ] **Step 3: Ensure source files are never moved or modified.**
-- [ ] **Step 4: Run asset-index tests and the full package suite.**
-- [ ] **Step 5: Commit** `feat: connect shared incremental asset index`.
+- [x] **Step 1: Add tests** for cold index, warm cache hit, content hash change, unreadable media, probe timeout retry, and path escape.
+- [x] **Step 2: Implement `index-assets` through the shared cache root** with explicit implementation-bound keys.
+- [x] **Step 3: Ensure source files are never moved or modified.**
+- [x] **Step 4: Run asset-index tests and the full package suite.**
+- [x] **Step 5: Commit** `feat: connect shared incremental asset index`.
 
 ## Chunk 3: B2 Blueprint and B3 Controlled Mutation
 
@@ -186,10 +186,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/src/remix_reference_video/adapters/mutation.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_blueprint_mutation_adapters.py`
 
-- [ ] **Step 1: Write failing tests** for precheck versus authoritative coverage ownership, Gate 2 atomic baseline/mutation package, forbidden new claims, fallback lint, and timing lint.
-- [ ] **Step 2: Implement adapters** that produce drafts and review packages but never approve them or generate TTS.
-- [ ] **Step 3: Add stale propagation** when Brief, baseline, mutation, claim boundary, or fallback changes.
-- [ ] **Step 4: Run focused tests and commit** `feat: automate blueprint and controlled mutation packages`.
+- [x] **Step 1: Write failing tests** for precheck versus authoritative coverage ownership, Gate 2 atomic baseline/mutation package, forbidden new claims, fallback lint, and timing lint.
+- [x] **Step 2: Implement adapters** that produce drafts and review packages but never approve them or generate TTS.
+- [x] **Step 3: Add stale propagation** when Brief, baseline, mutation, claim boundary, or fallback changes.
+- [x] **Step 4: Run focused and full regression tests**; commit intentionally skipped per owner instruction.
 
 ### Task 10: Implement evidence-gated production script compilation
 
@@ -198,10 +198,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/src/remix_reference_video/adapters/script_compile.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_script_compile.py`
 
-- [ ] **Step 1: Write failing tests** for missing evidence, approved fallback selection, forbidden claim strengthening, input hash recording, and candidate-only output.
-- [ ] **Step 2: Implement `build-production-script`** to consume only Gate 2 bundle, approved evidence matrix, and approved fallback.
-- [ ] **Step 3: Keep `approved_production_script.json` creation inside the Approval Service transaction; the compiler must never create it.**
-- [ ] **Step 4: Run focused tests and commit** `feat: compile production scripts from approved evidence`.
+- [x] **Step 1: Write failing tests** for missing evidence, approved fallback selection, forbidden claim strengthening, input hash recording, and candidate-only output.
+- [x] **Step 2: Implement `build-production-script`** to consume only Gate 2 bundle, approved evidence matrix, and approved fallback.
+- [x] **Step 3: Keep `approved_production_script.json` creation inside the Approval Service transaction; the compiler must never create it.**
+- [x] **Step 4: Run focused and full regression tests**; commit intentionally skipped per owner instruction.
 
 ## Chunk 4: B4 Retrieval, Coverage, Matching, and Gate 3
 
@@ -212,10 +212,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Modify: `.agents/skills/remix-reference-video/src/remix_reference_video/asset_index.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_retrieval_adapters.py`
 
-- [ ] **Step 1: Write failing tests** for precheck/authoritative scope, qualification gates, semantic/action/product/scene scoring, perceptual duplicate suppression, global scheduling, and missing-material blocking.
-- [ ] **Step 2: Implement `build-coverage --scope authoritative` and `match-assets`** with deterministic scoring version in cache fingerprints.
-- [ ] **Step 3: Implement candidate review package with explicit overlay policy** (`retain_source_text`, `crop`, `cover`, `replace`, `no_action`) and approved broad ranges.
-- [ ] **Step 4: Run focused retrieval tests and commit** `feat: automate coverage and material matching packages`.
+- [x] **Step 1: Write failing tests** for precheck/authoritative scope, qualification gates, semantic/action/product/scene scoring, perceptual duplicate suppression, global scheduling, and missing-material blocking.
+- [x] **Step 2: Implement `build-coverage --scope authoritative` and `match-assets`** with deterministic scoring version in cache fingerprints.
+- [x] **Step 3: Implement candidate review package with explicit overlay policy** (`retain_source_text`, `crop`, `cover`, `replace`, `no_action`) and approved broad ranges.
+- [x] **Step 4: Run focused and full regression tests**; commit intentionally skipped per owner instruction.
 
 ### Task 12: Implement Gate 3 selection, evidence closure, and stale propagation
 
@@ -224,10 +224,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/src/remix_reference_video/adapters/gate3.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_gate3.py`
 
-- [ ] **Step 1: Write failing tests** for separate selection/evidence substates, current-hash approval binding, material range extension, source-content change, overlay change, and Gate 2 return for structural changes.
-- [ ] **Step 2: Implement** `build-material-selection-package`, `freeze-fragment-plan`, `validate-script-evidence`, and `summarize-gate3`.
-- [ ] **Step 3: Ensure both Gate 3 substates become stale on relevant material/overlay changes, while unrelated assets remain reusable.**
-- [ ] **Step 4: Run focused tests and commit** `feat: enforce two-step gate 3 evidence closure`.
+- [x] **Step 1: Write failing tests** for separate selection/evidence substates, current-hash approval binding, material range extension, source-content change, overlay change, and Gate 2 return for structural changes.
+- [x] **Step 2: Implement** `build-material-selection-package`, `freeze-fragment-plan`, `validate-script-evidence`, and `summarize-gate3`.
+- [x] **Step 3: Ensure both Gate 3 substates become stale on relevant material/overlay changes, while unrelated assets remain reusable.**
+- [x] **Step 4: Run focused and full regression tests**; commit intentionally skipped per owner instruction.
 
 ## Chunk 5: B5 Reconstruction and Gate 4/5
 
@@ -239,10 +239,11 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/tests/test_reconstruction_adapters.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_voice.py`
 
-- [ ] **Step 1: Write failing tests** for source copy-only behavior, material manifest hashes, approved script-only TTS input, idempotency key, retry categories, timeout, rate limit, and incomplete audio rejection.
-- [ ] **Step 2: Implement `materialize-approved-broad`** as a copy/export operation bounded by the immutable fragment plan.
-- [ ] **Step 3: Implement `generate-voice`** with 60-second per-attempt timeout, three-attempt maximum, retryable error categories, capped backoff, and provider identity in the cache key.
-- [ ] **Step 4: Run focused tests and commit** `feat: materialize approved ranges and generate idempotent voice`.
+- [x] **Step 1: Write failing tests** for source copy-only behavior, material manifest hashes, approved script-only TTS input, idempotency key, retry categories, timeout, rate limit, and incomplete audio rejection.
+- [x] **Step 2: Implement `materialize-approved-broad`** as a copy/export operation bounded by the immutable fragment plan.
+- [x] **Step 3: Implement `generate-voice`** with 60-second per-attempt timeout, three-attempt maximum, retryable error categories, capped backoff, and provider identity in the cache key.
+- [x] **Step 4: Add `voice_preflight` between Gate 3 and Gate 4, binding video duration budgets and blocking TTS before generation when the estimate exceeds budget.
+- [x] **Step 5: Run focused and full regression tests**; commit intentionally skipped per owner instruction.
 
 ### Task 14: Build timeline, captions, proxy and boundary validation
 
@@ -252,10 +253,10 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/tests/test_timeline.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_proxy_validation.py`
 
-- [ ] **Step 1: Write failing tests** for measured voice duration, subtitle non-overlap, broad-range containment, 1.00x speed, proxy profile selection, boundary frames, and no formal render before Gate 4 post approval.
-- [ ] **Step 2: Implement `build-reconstruction-timeline`** using real TTS duration and only narrowing Gate 3 ranges.
-- [ ] **Step 3: Implement `render-proxy` and `validate-proxy-boundaries`** with default 540x960/30fps and explicit 720x1280/30fps override in the task config.
-- [ ] **Step 4: Run focused timeline/proxy tests and commit** `feat: build measured timeline and proxy boundary checks`.
+- [x] **Step 1: Write failing tests** for measured voice duration, subtitle non-overlap, broad-range containment, 1.00x speed, proxy profile selection, boundary frames, preflight-before-TTS ordering, and no formal render before Gate 4 post approval.
+- [x] **Step 2: Implement `build-reconstruction-timeline`** using real TTS duration and only narrowing Gate 3 ranges.
+- [x] **Step 3: Implement `render-proxy` and `validate-proxy-boundaries`** with default 540x960/30fps and explicit 720x1280/30fps override in the task config.
+- [x] **Step 4: Run focused and full regression tests**; commit intentionally skipped per owner instruction.
 
 ### Task 15: Render final bundle and Gate 5 package
 
@@ -264,11 +265,11 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/src/remix_reference_video/adapters/render.py`
 - Create: `.agents/skills/remix-reference-video/tests/test_render_adapter.py`
 
-- [ ] **Step 1: Write failing tests** for Gate 4 summary prerequisites, final render inputs, stream/duration checks, SRT sidecar, output bundle hashes, Gate 5 awaiting-user status, and pilot archive prohibition.
-- [ ] **Step 2: Implement** `render-final` and `build-gate5-package`; do not self-approve Gate 5.
-- [ ] **Step 3: Implement ordinary-task `archive-approved` with a hard `manual-contract-only` refusal.**
-- [ ] **Step 4: Run focused render tests and full regression tests.**
-- [ ] **Step 5: Commit** `feat: produce validated gate 5 delivery bundle`.
+- [x] **Step 1: Write failing tests** for Gate 4 summary prerequisites, final render inputs, stream/duration checks, SRT sidecar, output bundle hashes, Gate 5 awaiting-user status, and pilot archive prohibition.
+- [x] **Step 2: Implement** `render-final` and `build-gate5-package`; do not self-approve Gate 5.
+- [x] **Step 3: Implement ordinary-task `archive-approved` with a hard `manual-contract-only` refusal.**
+- [x] **Step 4: Run focused render tests and full regression tests.**
+- [x] **Step 5: Commit intentionally skipped per owner instruction.**
 
 ## Chunk 6: FastAPI/SSE, G-B evidence, and documentation synchronization
 
@@ -279,11 +280,11 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/tests/test_api.py`
 - Modify: `.agents/skills/remix-reference-video/pyproject.toml`
 
-- [ ] **Step 1: Write failing API tests** for redacted `ProgressView`, ETag/revision, artifact allowlist, SSE reconnect with `Last-Event-ID`, event deduplication, and no Gate-write endpoint.
-- [ ] **Step 2: Add FastAPI dependency only in the API runtime extra**; keep CLI and core package usable without the server.
-- [ ] **Step 3: Implement read-only task list/detail/artifact metadata and SSE revision notices.**
+- [x] **Step 1: Write failing API tests** for redacted `ProgressView`, ETag/revision, artifact allowlist, SSE reconnect with `Last-Event-ID`, event deduplication, and no Gate-write endpoint.
+- [x] **Step 2: Add FastAPI dependency only in the API runtime extra**; keep CLI and core package usable without the server.
+- [x] **Step 3: Implement read-only task list/detail/artifact metadata and SSE revision notices.**
 - [ ] **Step 4: Run API tests and verify the API reads state rather than maintaining a second state machine.**
-- [ ] **Step 5: Commit** `feat: expose read-only progress api and sse events`.
+- [ ] **Step 5: Commit** intentionally skipped per owner instruction after Step 4 is verified.
 
 ### Task 17: Implement G-B measurement and frozen-pair harness
 
@@ -293,11 +294,11 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Create: `.agents/skills/remix-reference-video/tests/fixtures/g_b_pair_plan.json`
 - Modify: `docs/reference-video-remix-optimization-plan.md`
 
-- [ ] **Step 1: Write failing tests** for empty isolated cold caches, cloned hot-cache snapshots, controlled visual mutation, separate approval records, exclusion of human Gate waits, no cross-run cache reads, and V1 comparability failure.
-- [ ] **Step 2: Implement `phase6_score_snapshot.json` generation** using the authoritative per-stage V2 thresholds and total `>=88` / target `91`.
-- [ ] **Step 3: Record `machine_api_critical_path_seconds`, `human_wait_seconds`, `operator_touch_seconds`, `rework_seconds`, `gate_return_count`, and cache status separately.**
-- [ ] **Step 4: Run the fixture harness; do not run real Track B production until owner-recorded G-A approval exists.**
-- [ ] **Step 5: Commit** `feat: measure frozen v1 v2 paired performance`.
+- [x] **Step 1: Write failing tests** for empty isolated cold caches, cloned hot-cache snapshots, controlled visual mutation, separate approval records, exclusion of human Gate waits, no cross-run cache reads, and V1 comparability failure.
+- [x] **Step 2: Implement `phase6_score_snapshot.json` generation** using the authoritative per-stage V2 thresholds and total `>=88` / target `91`.
+- [x] **Step 3: Record `machine_api_critical_path_seconds`, `human_wait_seconds`, `operator_touch_seconds`, `rework_seconds`, `gate_return_count`, and cache status separately.**
+- [x] **Step 4: Run the isolated fixture tests; ordinary Track B production remains prohibited until G-B and supervised-operator approval.**
+- [x] **Step 5: Commit intentionally skipped per owner instruction.**
 
 ### Task 18: Synchronize project documentation and release state
 
@@ -310,11 +311,11 @@ Expected: Existing 75 tests remain green, plus the new B0 tests.
 - Do not modify: `.agents/skills/remix-reference-video/manifest.json`
 - Do not modify: `work/2026-08-15-tablemat-ga-replacement-pilot/`
 
-- [ ] **Step 1: Record the replacement pilot as Gate 5-passed but G-A-not-passed**, including the three audit gaps and the fact that it remains in `work/` by contract.
-- [ ] **Step 2: Add the production-backend design as the normative Track B reference** and link the implementation plan.
-- [ ] **Step 3: Keep all docs consistent on `track_b=locked_until_g_a`, `track_c=locked_until_g_b`, no approval reuse, and no pilot archive.**
-- [ ] **Step 4: Update Fast Path docs** to distinguish tested v0 fixture behavior from unimplemented real five-stage production.
-- [ ] **Step 5: Run static validation, trigger smoke, package tests, and link/path checks.**
+- [x] **Step 1: Record the replacement pilot as Gate 5-passed and retain the independent clean-harness G-A result**, including the three historical audit gaps and the fact that the replacement pilot remains in `work/` by contract.
+- [x] **Step 2: Add the production-backend design as the normative Track B reference** and link the implementation plan.
+- [x] **Step 3: Keep all docs consistent on `track_b=locked_until_g_a`, `track_c=locked_until_g_b`, no approval reuse, and no pilot archive.**
+- [x] **Step 4: Update Fast Path docs** to distinguish tested v0 fixture behavior from the lock-protected native runner and incomplete production registry.
+- [x] **Step 5: Run static validation, trigger smoke, package tests, and link/path checks.**
 
 Run:
 

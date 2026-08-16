@@ -4,6 +4,7 @@
 
 - [通用规则](#通用规则)
 - [`project_brief.yaml`](#project_briefyaml)
+- [`stage_inputs/<stage>.json`](#stage_inputsstagejson)
 - [`pipeline_state.json`](#pipeline_statejson)
 - [`recipe.json`](#recipejson)
 - [`shot_blueprint.json`](#shot_blueprintjson)
@@ -25,6 +26,30 @@
 - 所有引用的媒体文件记录 `sha256`。图像或视频关键帧同时记录感知哈希。
 - `shot_id` 只用于参考片原镜头；`fragment_id` 只用于重构后的目标片段。两者不要混用。
 - `fragment_id` 格式为 `fragmentNN`，但片段数不固定。
+
+## `stage_inputs/<stage>.json`
+
+阶段交接文件是 Agent/运营决策到 adapter 的只读输入契约，不是 Gate 审批记录。审批唯一权威仍是 `pipeline_state.json`；交接文件不得推进 Gate、携带 `approval`/`approved`/`gate_status` 或审核包哈希。
+
+最小结构：
+
+```json
+{
+  "artifact_type": "stage_input",
+  "schema_id": "urn:capcut:remix-reference-video:artifact:stage-input",
+  "schema_version": "1.0.0",
+  "contract_version": "2.0.0-alpha.1",
+  "skill_version": "2.0.0-alpha.1",
+  "stage_id": "compile-blueprint",
+  "producer": {"kind": "agent", "id": "operator", "version": "1"},
+  "created_at": "2026-08-16T10:00:00Z",
+  "lifecycle_status": "awaiting_user",
+  "input_hashes": {"recipe.json": "<sha256>"},
+  "payload": {"target_fragments": []}
+}
+```
+
+`stage_id` 必须与文件名 `<stage>.json` 和当前 adapter 节点一致；`input_hashes` 的键只能是任务目录内的相对普通文件路径，不能使用绝对路径、`..` 或 symlink，且每个 SHA-256 必须与当前文件内容一致。`lifecycle_status` 只允许 `draft`、`awaiting_user`、`stale`、`consumed`。上游产物哈希变化后交接文件只能标记为 `stale`，不能继续作为有效输入。`payload` 保存阶段业务决策，例如 Blueprint 的 `target_fragments`、Mutation 的 `fallback_ids`、Retrieval 的 `overlay_decisions` 或 Reconstruction 的生成设置；它不能替代 Gate 决定。Runner 在发现对应文件时会在 adapter 执行前进行同样的只读校验，`audit` 会扫描全部 `stage_inputs/*.json`。
 
 ## `project_brief.yaml`
 
@@ -148,6 +173,7 @@ V2 的 `fragment_plan.json` 只保存 Gate 3 批准的不可变宽范围，不�
 - `source_path`、`source_sha256`、`media_type`；
 - `source_start_seconds`、`source_end_seconds`；
 - `approved_broad_range`（起止秒或起止帧）；不得写入 TTS 后的最终精确裁点；
+- `visual_duration_budget_seconds`：视频严格等于批准宽范围的 `end-start`，图片为 `null`；
 - `overlay_present`、`overlay_decision`；
 - `action_group_id`、`span_group_id`；
 - 用户批准决定。
@@ -165,6 +191,7 @@ V2 的 `fragment_plan.json` 只保存 Gate 3 批准的不可变宽范围，不�
 - `script_evidence_matrix.json`：逐句口播与 Gate 3 批准素材证据窗、动作完整性、fallback 和闭环决定。
 - `production_script_candidate.json`：证据闭环后由 Controlled Mutation 编译的待批准脚本。
 - `approved_production_script.json`：Gate 4 生成前提升的唯一 TTS 文本和设置快照。
+- `voice_preflight.json`：Gate 4 生成前审核包的强制输入；绑定当前 `production_script_candidate.json` 与 `fragment_plan.json` 哈希，逐段记录媒体类型、视频画面预算、配音估算、margin 和 `passed|blocked`。图片预算与 margin 为 `null`。
 - `material_manifest.json`：Reconstruction 复制/导出 Gate 3 批准宽范围到 `material/` 的物理记录和副本哈希。
 - `reconstruction_timeline.json`：TTS 实测后生成的字幕、累计时间轴和 Gate 3 宽范围内的精确裁点。
 - `match_validation_report.json`：Gate 3 选材确认前的不可变候选校验快照。
@@ -191,5 +218,6 @@ Gate 5 生成后的状态回写是交付契约的一部分：正式渲染适配�
 - `reconstruction_timeline.json` 只能引用 `fragment_plan.json` 的哈希并在批准宽范围内收窄；不得覆盖或原地改写 `fragment_plan.json`。
 - `material_manifest.json` 的副本 SHA 必须与批准源 SHA 和实际文件一致；物理复制失败可重试，不改变 Gate 3 决定。
 - TTS 只能消费 `approved_production_script.json`；Gate 4 生成前未批准时不得生成真实生产音频。
+- Gate 4 生成前审核包必须绑定当前且 `passed` 的 `voice_preflight.json`；批准的 TTS 语速必须与预检语速一致。预检 `blocked` 时不得生成真实 TTS。
 - 任何保存报告的输入哈希与当前文件不一致时，报告状态必须为 `stale`。
 - 生产状态不允许 `missing_material`、未审批卖点、未处理叠字或未审批配音。

@@ -135,6 +135,12 @@ class StageAdapter(Protocol):
 
 adapter 只产生声明的输出，不能直接写 `pipeline_state.json`，不能审批 Gate，不能读取未登记的任意 `assets/` 路径。
 
+#### 阶段交接契约 `stage_inputs/<stage>.json`
+
+Agent/运营提交给 adapter 的业务输入统一落在任务目录的 `stage_inputs/` 下。文件使用 V2 五字段 envelope，并额外要求 `stage_id`、`producer`、可信 `created_at`、`lifecycle_status`、任务内相对路径到 SHA-256 的 `input_hashes` 和对象型 `payload`。`stage_id` 必须与文件名和 adapter 节点一致；每个输入路径拒绝绝对路径、`..`、symlink 和越界，哈希必须在执行前重算并匹配。生命周期只允许 `draft|awaiting_user|stale|consumed`。
+
+该文件是只读交接，不是审批权威：禁止携带 `approval`、`approved`、`gate_status`、审核包哈希等字段，不能推进或伪造 Gate。上游产物哈希变化时交接失效；runner 在 adapter 执行前校验，`audit` 扫描并报告错误。Gate 决定、`state_revision` 和审批输入哈希仍只能由 `ApprovalService` 写入 `pipeline_state.json`。
+
 ### 4.4 Artifact Validator
 
 Validator 按 registry 解析 artifact 类型并执行：
@@ -418,12 +424,13 @@ Gate 3 evidence fallback selection 变化（Gate 2 已授权该 fallback）
 | 3f | B0 `summarize-gate3` | 两个当前子状态 | Gate 3 汇总 | 两者均 approved 才继续 |
 | 4a | B3 `build-production-script` | baseline、mutation、approved evidence matrix | `production_script_candidate.json` | Gate 3 approved |
 | 4b | B5 `materialize-approved-broad` | approved fragment plan、源素材 | `material/`、`material_manifest.json` | Gate 3 approved，可与 4a 并行 |
-| 4c | B3/B5 `build-gate4-pre-package` | script candidate、TTS 设置、material status | Gate 4 生成前审核包 | 等待 `gate4_pre_generation` |
-| 4d | B3 `promote-production-script` | candidate、TTS 设置、当前决定 | 不可变 `approved_production_script.json` | 与生成前批准同一事务 |
-| 4e | B5 `generate-voice` | approved production script | voice、manifest、实测时长 | Gate 4 pre approved |
-| 4f | B5 `build-reconstruction-timeline` | voice 实测、fragment plan、material manifest、fps | timeline、SRT、精确裁点 | 越界则返回受影响 Gate 3 |
-| 4g | B5 `build-gate4-post-package` | voice、timeline、SRT、听审代理 | Gate 4 生成后审核包 | 等待 `gate4_post_generation` |
-| 4h | B0 `summarize-gate4` | 两个当前子状态 | Gate 4 汇总 | 两者均 approved 才继续 |
+| 4c | B5 `voice-preflight` | production script candidate、Gate 3 fragment plan、字速/标点/音色历史语速 | `voice_preflight.json` | 预检失败则不生成 Gate 4 包、不调用 TTS |
+| 4d | B3/B5 `build-gate4-pre-package` | script candidate、`voice_preflight.json`、material status、TTS 设置 | Gate 4 生成前审核包 | 等待 `gate4_pre_generation` |
+| 4e | B3 `promote-production-script` | candidate、TTS 设置、当前决定、预检哈希 | 不可变 `approved_production_script.json` | 与生成前批准同一事务；语速必须与预检一致 |
+| 4f | B5 `generate-voice` | approved production script | voice、manifest、实测时长 | Gate 4 pre approved 且预检通过 |
+| 4g | B5 `build-reconstruction-timeline` | voice 实测、fragment plan、material manifest、fps | timeline、SRT、精确裁点 | 先复核视频预算；越界则返回受影响 Gate 3/4 |
+| 4h | B5 `build-gate4-post-package` | voice、timeline、SRT、听审代理 | Gate 4 生成后审核包 | 等待 `gate4_post_generation` |
+| 4i | B0 `summarize-gate4` | 两个当前子状态 | Gate 4 汇总 | 两者均 approved 才继续 |
 | 5a | B5 `render-proxy` | approved timeline、material、voice | 代理视频、边界片 | Gate 4 approved |
 | 5b | B5 `validate-proxy-boundaries` | proxy、timeline、边界规则 | 代理/边界校验报告 | 未通过则阻塞正式渲染 |
 | 5c | B5 `render-final` | 已批准输入、通过的代理报告 | MP4、SRT、render/validation/import reports | 只生成 Gate 5 包，不自批 |
