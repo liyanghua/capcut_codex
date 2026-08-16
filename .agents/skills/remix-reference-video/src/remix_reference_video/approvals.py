@@ -29,6 +29,20 @@ _PREDECESSORS = {
     "gate4_post_generation": ("gate1", "gate2", "gate3", "gate4_pre_generation"),
     "gate5": ("gate1", "gate2", "gate3", "gate4"),
 }
+_BUSINESS_STAGE_GATES = {
+    "reference_split": "gate1",
+    "content_blueprint": "gate2",
+    "material_matching": "gate3",
+    "voice": "gate4",
+    "final_review": "gate5",
+}
+_BUSINESS_STAGE_APPROVALS = {
+    "reference_split": ("gate1",),
+    "content_blueprint": ("gate2",),
+    "material_matching": ("gate3_material_selection", "gate3_evidence_closure"),
+    "voice": ("gate4_pre_generation", "gate4_post_generation"),
+    "final_review": ("gate5",),
+}
 
 
 class ApprovalService:
@@ -36,6 +50,41 @@ class ApprovalService:
         self.storage = storage
         self.root = storage.task_root
         self.transactions = TransactionManager(storage)
+
+    def reconcile_business_stages(self) -> dict[str, Any]:
+        """Rebuild stage summaries from current hash-verified approval records."""
+
+        state = self.storage.read_state()
+        gates = state.get("gate_status")
+        decisions = state.get("decisions")
+        if not isinstance(gates, Mapping) or not isinstance(decisions, list):
+            raise ApprovalError("gate_status and decisions are required")
+        approved_records: dict[str, Mapping[str, object]] = {}
+        for record in decisions:
+            if not isinstance(record, Mapping) or record.get("decision") != "approved":
+                continue
+            gate_id = record.get("gate_id")
+            if not isinstance(gate_id, str) or gates.get(gate_id) != "approved":
+                continue
+            self._verify_inputs(record.get("input_hashes"))
+            approved_records[gate_id] = record
+        verified_gates: dict[str, object] = {}
+        for stage_id, required_gates in _BUSINESS_STAGE_APPROVALS.items():
+            if all(gate_id in approved_records for gate_id in required_gates):
+                verified_gates[_BUSINESS_STAGE_GATES[stage_id]] = "approved"
+        stages = self._business_stages(state.get("stages"), verified_gates)
+        if stages == state.get("stages"):
+            return state
+        revision = int(state.get("state_revision", -1))
+        transaction_id = f"business-stage-projection-r{revision}"
+        self.transactions.prepare(
+            transaction_id=transaction_id,
+            expected_revision=revision,
+            state_changes={"stages": stages},
+            event={"event_type": "business_stage_projection.reconciled"},
+        )
+        self.transactions.commit(transaction_id)
+        return self.storage.read_state()
 
     def approve(
         self,
@@ -100,16 +149,36 @@ class ApprovalService:
         gates[gate_id] = self._gate_status_for_decision(str(decision["decision"]))
         self._summarize(gates, "gate3", "gate3_material_selection", "gate3_evidence_closure")
         self._summarize(gates, "gate4", "gate4_pre_generation", "gate4_post_generation")
+        # A fresh upstream approval invalidates any stale/blocked downstream
+        # stop. The downstream stages must execute against the new inputs
+        # before they can create a new approval package.
+        if gate_id.startswith("gate3_") and gates.get("gate3") == "approved":
+            for downstream in (
+                "gate4_pre_generation",
+                "gate4_post_generation",
+                "gate4",
+                "gate5",
+            ):
+                if gates.get(downstream) in {"blocked", "stale", "rejected"}:
+                    gates[downstream] = "not_ready"
         state_changes: dict[str, object] = {
             "gate_status": gates,
             "decisions": decisions,
+            "stages": self._business_stages(state.get("stages"), gates),
+            "artifacts": {
+                **dict(state.get("artifacts", {})),
+                f"gate_review_packages/{gate_id}.json": {
+                    "path": f"gate_review_packages/{gate_id}.json",
+                    "sha256": review_package_hash,
+                },
+            },
         }
         promotions: tuple[ArtifactPromotion, ...] = ()
         if gate_id == "gate4_pre_generation" and decision["decision"] == "approved":
-            promotion, artifact = self._stage_approved_script(record, decision)
+            promotion, artifact = self._stage_approved_script(record, decision, package)
             promotions = (promotion,)
             state_changes["artifacts"] = {
-                **dict(state.get("artifacts", {})),
+                **dict(state_changes["artifacts"]),
                 "approved_production_script": artifact,
             }
         transaction_id = f"approval-{decision_key[:24]}"
@@ -173,12 +242,30 @@ class ApprovalService:
             )
 
     def _stage_approved_script(
-        self, record: Mapping[str, object], decision: Mapping[str, object]
+        self,
+        record: Mapping[str, object],
+        decision: Mapping[str, object],
+        review_package: Mapping[str, object],
     ) -> tuple[ArtifactPromotion, dict[str, str]]:
         strategy = decision.get("strategy")
         settings = strategy.get("tts_settings") if isinstance(strategy, Mapping) else None
         if not isinstance(settings, Mapping) or not settings:
             raise ApprovalError("gate4_pre_generation requires tts_settings")
+        package_inputs = review_package.get("input_hashes")
+        if isinstance(package_inputs, Mapping) and "voice_preflight.json" in package_inputs:
+            preflight_path = self._task_file(
+                self.root / "voice_preflight.json", "voice preflight"
+            )
+            preflight = read_json_object(preflight_path)
+            if preflight.get("preflight_status") != "passed":
+                raise ApprovalError("voice preflight must pass before Gate 4 approval")
+            approved_speed = settings.get("speed", settings.get("speed_ratio", 1.0))
+            if (
+                isinstance(approved_speed, bool)
+                or not isinstance(approved_speed, (int, float))
+                or float(approved_speed) != float(preflight.get("speed", 0.0))
+            ):
+                raise ApprovalError("TTS speed does not match voice preflight")
         candidate_path = self._task_file(
             self.root / "production_script_candidate.json", "script candidate"
         )
@@ -229,6 +316,19 @@ class ApprovalService:
             gates[summary] = "approved"
         elif gates.get(first) in {"rejected", "blocked", "stale"} or gates.get(second) in {"rejected", "blocked", "stale"}:
             gates[summary] = "blocked"
+
+    @staticmethod
+    def _business_stages(
+        raw_stages: object, gates: Mapping[str, object]
+    ) -> dict[str, object]:
+        stages = dict(raw_stages) if isinstance(raw_stages, Mapping) else {}
+        for stage_id, gate_id in _BUSINESS_STAGE_GATES.items():
+            gate_status = gates.get(gate_id)
+            if gate_status == "approved":
+                stages[stage_id] = {"status": "approved"}
+            elif gate_status in {"blocked", "rejected", "stale"}:
+                stages[stage_id] = {"status": "blocked" if gate_status == "rejected" else gate_status}
+        return stages
 
     @staticmethod
     def _gate_status_for_decision(decision: str) -> str:

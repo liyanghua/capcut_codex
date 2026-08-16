@@ -96,6 +96,59 @@ class ApprovalServiceTests(unittest.TestCase):
         approved_at = datetime.fromisoformat(str(result["approved_at"]).replace("Z", "+00:00"))
         self.assertEqual(approved_at.tzinfo, UTC)
 
+    def test_approval_registers_the_approved_review_package_hash(self) -> None:
+        package, digest = self.write_package("gate1")
+        self.store.update_state(
+            lambda current: current
+            | {
+                "artifacts": {
+                    "gate_review_packages/gate1.json": {
+                        "path": "gate_review_packages/gate1.json",
+                        "sha256": "0" * 64,
+                    }
+                }
+            }
+        )
+        atomic_write_json(
+            package,
+            read_json(package)
+            | {"state_revision": self.store.read_state()["state_revision"]},
+        )
+        digest = self.sha256(package)
+
+        self.service.approve(
+            gate_id="gate1",
+            review_package_hash=digest,
+            decision_file=self.write_decision(),
+            actor="owner@example.test",
+        )
+
+        registered = self.store.read_state()["artifacts"][
+            "gate_review_packages/gate1.json"
+        ]
+        self.assertEqual(registered["path"], "gate_review_packages/gate1.json")
+        self.assertEqual(registered["sha256"], digest)
+
+    def test_gate_approvals_update_business_stage_summaries(self) -> None:
+        self.approve("gate1")
+        self.approve("gate2")
+
+        stages = self.store.read_state()["stages"]
+        self.assertEqual(stages["reference_split"]["status"], "approved")
+        self.assertEqual(stages["content_blueprint"]["status"], "approved")
+
+    def test_reconcile_business_stages_repairs_existing_approved_state(self) -> None:
+        self.approve("gate1")
+        self.approve("gate2")
+        self.store.update_state(
+            lambda state: {key: value for key, value in state.items() if key != "stages"}
+        )
+
+        result = self.service.reconcile_business_stages()
+
+        self.assertEqual(result["stages"]["reference_split"]["status"], "approved")
+        self.assertEqual(result["stages"]["content_blueprint"]["status"], "approved")
+
     def test_rejects_hash_mismatch_stale_revision_and_cross_task_package(self) -> None:
         path, digest = self.write_package("gate1")
         decision = self.write_decision()
@@ -141,6 +194,32 @@ class ApprovalServiceTests(unittest.TestCase):
 
         self.assertEqual(self.store.read_state()["gate_status"]["gate3"], "not_ready")
 
+    def test_fresh_gate3_approval_clears_old_downstream_blocks(self) -> None:
+        state = self.store.update_state(
+            lambda current: current
+            | {
+                "gate_status": current["gate_status"]
+                | {
+                    "gate1": "approved",
+                    "gate2": "approved",
+                    "gate3_material_selection": "awaiting_user",
+                    "gate3_evidence_closure": "approved",
+                    "gate3": "not_ready",
+                    "gate4_pre_generation": "blocked",
+                    "gate4_post_generation": "stale",
+                    "gate4": "blocked",
+                    "gate5": "stale",
+                }
+            }
+        )
+        self.approve("gate3_material_selection", state_revision=state["state_revision"])
+        gates = self.store.read_state()["gate_status"]
+        self.assertEqual(gates["gate3"], "approved")
+        self.assertEqual(gates["gate4_pre_generation"], "not_ready")
+        self.assertEqual(gates["gate4_post_generation"], "not_ready")
+        self.assertEqual(gates["gate4"], "not_ready")
+        self.assertEqual(gates["gate5"], "not_ready")
+
     def test_repeated_identical_approval_is_idempotent(self) -> None:
         path, digest = self.write_package("gate1")
         decision = self.write_decision()
@@ -164,6 +243,13 @@ class ApprovalServiceTests(unittest.TestCase):
     def test_gate4_pre_approval_promotes_script_with_tts_settings(self) -> None:
         candidate = self.root / "production_script_candidate.json"
         atomic_write_json(candidate, {"artifact_type": "production_script_candidate", "lines": []})
+        preflight = self.root / "voice_preflight.json"
+        atomic_write_json(preflight, {
+            "artifact_type": "voice_preflight",
+            "preflight_status": "passed",
+            "speed": 1.0,
+            "fragments": [],
+        })
         state = self.store.update_state(
             lambda current: current
             | {
@@ -181,7 +267,10 @@ class ApprovalServiceTests(unittest.TestCase):
         package, digest = self.write_package(
             "gate4_pre_generation",
             state_revision=state["state_revision"],
-            input_hashes={"production_script_candidate.json": self.sha256(candidate)},
+            input_hashes={
+                "production_script_candidate.json": self.sha256(candidate),
+                "voice_preflight.json": self.sha256(preflight),
+            },
         )
         self.assertTrue(package.is_file())
         decision = self.write_decision(
@@ -210,6 +299,49 @@ class ApprovalServiceTests(unittest.TestCase):
             self.store.read_state()["gate_status"]["gate4_pre_generation"],
             "approved",
         )
+
+    def test_gate4_pre_rejects_tts_speed_not_bound_to_preflight(self) -> None:
+        candidate = self.root / "production_script_candidate.json"
+        atomic_write_json(candidate, {"artifact_type": "production_script_candidate", "lines": []})
+        preflight = self.root / "voice_preflight.json"
+        atomic_write_json(preflight, {
+            "artifact_type": "voice_preflight",
+            "preflight_status": "passed",
+            "speed": 1.0,
+            "fragments": [],
+        })
+        state = self.store.update_state(
+            lambda current: current | {
+                "gate_status": current["gate_status"] | {
+                    "gate1": "approved",
+                    "gate2": "approved",
+                    "gate3_material_selection": "approved",
+                    "gate3_evidence_closure": "approved",
+                    "gate3": "approved",
+                    "gate4_pre_generation": "awaiting_user",
+                }
+            }
+        )
+        package, digest = self.write_package(
+            "gate4_pre_generation",
+            state_revision=state["state_revision"],
+            input_hashes={
+                "production_script_candidate.json": self.sha256(candidate),
+                "voice_preflight.json": self.sha256(preflight),
+            },
+        )
+        decision = self.write_decision(
+            scope_ids=["production_script_candidate.json"],
+            strategy={"tts_settings": {"provider": "doubao", "speed": 1.2}},
+        )
+
+        with self.assertRaisesRegex(ApprovalError, "speed"):
+            self.service.approve(
+                gate_id="gate4_pre_generation",
+                review_package_hash=digest,
+                decision_file=decision,
+                actor="owner",
+            )
 
     def test_approve_gate_cli_returns_structured_success(self) -> None:
         _, digest = self.write_package("gate1")

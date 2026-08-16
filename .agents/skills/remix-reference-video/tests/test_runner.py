@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import hashlib
 import json
 import multiprocessing
 import os
@@ -14,7 +15,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from remix_reference_video import ExecutionPlan
-from remix_reference_video.runner import FastPathRunner
+from remix_reference_video.approvals import ApprovalService
+from remix_reference_video.runner import FastPathRunner, ProductionRunner
 from remix_reference_video.storage import TaskStorage
 
 
@@ -239,6 +241,7 @@ class FastPathRunnerTests(unittest.TestCase):
         self.assertEqual(result.status, "awaiting_user")
         self.assertEqual(result.error_code, "GATE_NOT_APPROVED")
         self.assertFalse((self.task_root / "calls.log").exists())
+
 
     def test_gate_status_without_hash_bound_decision_cannot_resume(self) -> None:
         stages = [
@@ -704,6 +707,210 @@ class FastPathRunnerTests(unittest.TestCase):
         self.assertEqual(result.status, "blocked")
         self.assertEqual(result.error_code, "MANUAL_CONTRACT_ONLY")
         self.assertEqual(before, after)
+
+
+class ProductionRunnerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temporary.cleanup)
+        self.task = Path(self._temporary.name).resolve() / "task"
+        self.task.mkdir()
+        self.reference = self.task / "reference.mp4"
+        self.reference.write_bytes(b"fixture")
+
+    def test_reference_split_stops_at_gate1_and_resume_is_write_free(self) -> None:
+        calls: list[str] = []
+        task = self.task
+        reference = self.reference
+
+        class FixtureAdapter:
+            execution_stage_id = "split-reference"
+            implementation_version = "fixture-v1"
+            stop_gate = "gate1"
+
+            def required_inputs(self) -> tuple[Path, ...]:
+                return (reference,)
+
+            def required_gates(self) -> tuple[str, ...]:
+                return ()
+
+            def declared_outputs(self) -> tuple[Path, ...]:
+                return (task / "recipe.json",)
+
+            def cache_fingerprint(self) -> str:
+                return "fixture-fingerprint"
+
+            def execute(self, *, attempt_id: str) -> dict[str, object]:
+                calls.append(attempt_id)
+                recipe = task / "recipe.json"
+                recipe.write_text('{"artifact_type":"recipe"}\n', encoding="utf-8")
+                (task / "gate_review_packages").mkdir()
+                (task / "gate_review_packages/gate1.json").write_text(
+                    json.dumps(
+                        {
+                            "gate_id": "gate1",
+                            "input_hashes": {
+                                "recipe.json": hashlib.sha256(recipe.read_bytes()).hexdigest()
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return {"status": "succeeded", "stop_gate": "gate1"}
+
+        runner = ProductionRunner(self.task, (FixtureAdapter(),))
+        runner.initialize(run_id="fixture-run")
+        first = runner.run()
+        before_resume = {
+            path.relative_to(self.task): path.read_bytes()
+            for path in self.task.rglob("*")
+            if path.is_file()
+        }
+
+        resumed = runner.run(resume=True)
+
+        state = TaskStorage(self.task).read_state()
+        self.assertEqual(first.status, "awaiting_user")
+        self.assertEqual(resumed.status, "awaiting_user")
+        self.assertEqual(state["stage_status"]["split-reference"], "succeeded")
+        self.assertEqual(state["gate_status"]["gate1"], "awaiting_user")
+        self.assertEqual(state["decisions"], [])
+        self.assertEqual(len(calls), 1)
+        metrics = TaskStorage(self.task).read_metrics()
+        self.assertEqual(len(metrics), 1)
+        self.assertEqual(metrics[0]["execution_stage_id"], "split-reference")
+        self.assertEqual(metrics[0]["status"], "succeeded")
+        self.assertGreaterEqual(metrics[0]["wall_seconds"], 0)
+        self.assertEqual(
+            before_resume,
+            {
+                path.relative_to(self.task): path.read_bytes()
+                for path in self.task.rglob("*")
+                if path.is_file()
+            },
+        )
+
+    def test_resume_retries_the_failed_stage(self) -> None:
+        attempts = 0
+        task = self.task
+        reference = self.reference
+
+        class FixtureAdapter:
+            execution_stage_id = "split-reference"
+            implementation_version = "fixture-v1"
+
+            def required_inputs(self) -> tuple[Path, ...]:
+                return (reference,)
+
+            def required_gates(self) -> tuple[str, ...]:
+                return ()
+
+            def declared_outputs(self) -> tuple[Path, ...]:
+                return (task / "recipe.json",)
+
+            def cache_fingerprint(self) -> str:
+                return "fixture-fingerprint"
+
+            def execute(self, *, attempt_id: str) -> dict[str, object]:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    raise RuntimeError("transient provider failure")
+                (task / "recipe.json").write_text(
+                    '{"artifact_type":"recipe"}\n', encoding="utf-8"
+                )
+                (task / "gate_review_packages").mkdir()
+                (task / "gate_review_packages/gate1.json").write_text(
+                    json.dumps({"gate_id": "gate1", "input_hashes": {}}),
+                    encoding="utf-8",
+                )
+                return {"status": "succeeded", "stop_gate": "gate1"}
+
+        runner = ProductionRunner(self.task, (FixtureAdapter(),))
+        runner.initialize(run_id="fixture-run")
+
+        with self.assertRaisesRegex(RuntimeError, "transient provider failure"):
+            runner.run()
+        resumed = runner.run(resume=True)
+
+        state = TaskStorage(self.task).read_state()
+        self.assertEqual(resumed.status, "awaiting_user")
+        self.assertEqual(attempts, 2)
+        self.assertEqual(state["stage_status"]["split-reference"], "succeeded")
+        self.assertEqual(state["gate_status"]["gate1"], "awaiting_user")
+        self.assertEqual(state["blockers"], [])
+
+    def test_gate_review_package_is_sealed_for_approval_service(self) -> None:
+        task = self.task
+        reference = self.reference
+
+        class FixtureAdapter:
+            execution_stage_id = "split-reference"
+            implementation_version = "fixture-v1"
+            stop_gate = "gate1"
+
+            def required_inputs(self) -> tuple[Path, ...]:
+                return (reference,)
+
+            def required_gates(self) -> tuple[str, ...]:
+                return ()
+
+            def declared_outputs(self) -> tuple[Path, ...]:
+                return (
+                    task / "recipe.json",
+                    task / "gate_review_packages/gate1.json",
+                )
+
+            def cache_fingerprint(self) -> str:
+                return "fixture-fingerprint"
+
+            def execute(self, *, attempt_id: str) -> dict[str, object]:
+                recipe = task / "recipe.json"
+                recipe.write_text('{"artifact_type":"recipe"}\n', encoding="utf-8")
+                (task / "gate_review_packages").mkdir()
+                (task / "gate_review_packages/gate1.json").write_text(
+                    json.dumps(
+                        {
+                            "gate_id": "gate1",
+                            "input_hashes": {
+                                "recipe.json": hashlib.sha256(recipe.read_bytes()).hexdigest()
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return {"status": "succeeded", "stop_gate": "gate1"}
+
+        runner = ProductionRunner(self.task, (FixtureAdapter(),))
+        runner.initialize(run_id="fixture-run")
+        result = runner.run()
+        package = self.task / "gate_review_packages/gate1.json"
+        package_value = json.loads(package.read_text(encoding="utf-8"))
+        decision = self.task / "gate1-decision.json"
+        decision.write_text(
+            json.dumps(
+                {
+                    "decision": "approved",
+                    "scope_type": "artifact_set",
+                    "scope_ids": ["recipe.json"],
+                    "strategy": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        approved = ApprovalService(TaskStorage(self.task)).approve(
+            gate_id="gate1",
+            review_package_hash=hashlib.sha256(package.read_bytes()).hexdigest(),
+            decision_file=decision,
+            actor="operator-1",
+        )
+
+        self.assertEqual(result.status, "awaiting_user")
+        self.assertEqual(package_value["run_id"], "fixture-run")
+        self.assertEqual(package_value["state_revision"], result.state_revision_after)
+        self.assertIn("created_at", package_value)
+        self.assertEqual(approved["decision"], "approved")
 
 
 if __name__ == "__main__":

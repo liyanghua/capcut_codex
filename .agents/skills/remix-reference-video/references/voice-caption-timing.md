@@ -27,6 +27,14 @@ TTS 文本唯一来自 Gate 4 生成前批准的 `approved_production_script.jso
 
 不同视觉片段属于同一句完整语义时，使用同一 `span_group_id`。特别是图片与前后视频组成一句时，应先生成整句，再切分音频，不要把每个短片段合成为生硬的独立句。
 
+## TTS 前画面预算预检
+
+Gate 3 冻结 `fragment_plan.json` 时，视频片段必须记录 `visual_duration_budget_seconds = approved_end - approved_start`；图片没有源视频时长限制，该字段为 `null`，后续只记录展示时长。
+
+Gate 3 汇总通过后、Gate 4 生成前审核包生成前，使用当前 `production_script_candidate.json`、字数、标点停顿、音色历史平均语速和拟用语速生成 `voice_preflight.json`。每段至少记录 `fragment_id`、`media_type`、`visual_duration_budget_seconds`、`voice_duration_estimate_seconds`、`voice_duration_margin_seconds` 和 `preflight_status`。视频 margin 为预算减估算；负数即 `blocked`。图片预算和 margin 为 `null`。
+
+预检阻塞时不得调用 TTS。可选恢复只有：缩短文案、使用 Gate 2 已批准 fallback、扩大 Gate 3 宽范围，或返回 Gate 2 合并/调整结构。Gate 4 审批的语速必须与预检配置一致；否则预检失效并重新计算。预检只减少晚发现问题的概率，不取代 TTS 后的实测时长校验。
+
 ## 豆包 TTS 配置
 
 当前协议兼容实现优先支持：
@@ -58,14 +66,14 @@ TTS 文本唯一来自 Gate 4 生成前批准的 `approved_production_script.jso
 
 ## 时间轴重建
 
-只有 `gate4_pre_generation=approved` 后才调用真实 TTS。TTS 完成并以 `ffprobe` 实测后，按 `fragment01 → fragmentNN` 的实际音频时长重建累计时间轴；这一步先于 `gate4_post_generation` 听审：
+只有当前 `voice_preflight=passed` 且 `gate4_pre_generation=approved` 后才调用真实 TTS。TTS 完成并以 `ffprobe` 实测后，先逐段复核实际时长没有超过 Gate 3 视频预算，再按 `fragment01 → fragmentNN` 的实际音频时长重建累计时间轴；这一步先于 `gate4_post_generation` 听审：
 
 ```text
 fragment.start = previous_fragment.end
 fragment.end = fragment.start + measured_audio_duration
 ```
 
-不带独立语音的视觉分段必须属于已定义的 `span_group_id`，不能产生无来源的任意时长。精确裁点只能在 Gate 3 批准的 `approved_broad_range` 内收窄，并写入 `reconstruction_timeline.json`，不得修改 `fragment_plan.json` 或 `recipe.json`。用户提出删除片段时，必须返回 Gate 2 重新审核所在语义组的文案，不能只裁掉音频中间一段造成病句。
+不带独立语音的视觉分段必须属于已定义的 `span_group_id`，不能产生无来源的任意时长。实际配音超出视频预算时，不得自动变速、冻结尾帧或越过 Gate 3 范围；必须返回受影响的 Gate 3 或 Gate 4。精确裁点只能在 Gate 3 批准的 `approved_broad_range` 内收窄，并写入 `reconstruction_timeline.json`，不得修改 `fragment_plan.json` 或 `recipe.json`。用户提出删除片段时，必须返回 Gate 2 重新审核所在语义组的文案，不能只裁掉音频中间一段造成病句。
 
 ## 字幕
 

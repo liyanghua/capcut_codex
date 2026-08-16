@@ -10,15 +10,19 @@ import shutil
 import subprocess
 import time
 import uuid
+from datetime import UTC, datetime
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .contracts import CommandResult, ExecutionPlan, PlanValidationError, StagePlan
+from .orchestrator import ProductionOrchestrator, StageAdapter, default_dag
+from .stage_input_validator import StageInputValidator
 from .storage import (
     StorageError,
     TaskBusy,
     TaskStorage,
+    atomic_write_json,
     read_json_object,
 )
 
@@ -1139,4 +1143,317 @@ class FastPathRunner:
             event_sequence=0,
             next_actions=(),
             error_code=error_code,
+        )
+
+
+class ProductionRunner:
+    """Run registered native adapters through the authoritative production DAG."""
+
+    def __init__(self, task_root: Path, adapters: tuple[StageAdapter, ...]) -> None:
+        self.task_root = Path(task_root).resolve(strict=True)
+        self.adapters = {adapter.execution_stage_id: adapter for adapter in adapters}
+        if len(self.adapters) != len(adapters):
+            raise StorageError("production adapter stage ids must be unique")
+        self.orchestrator = ProductionOrchestrator(default_dag())
+
+    @classmethod
+    def from_registry(cls, task_root: Path, registry: object) -> "ProductionRunner":
+        """Build a runner from a DAG-validated native adapter registry."""
+
+        adapters = getattr(registry, "adapters", None)
+        if not callable(adapters):
+            raise StorageError("native registry must expose adapters()")
+        return cls(task_root, tuple(adapters()))
+
+    def initialize(self, *, run_id: str | None = None) -> dict[str, Any]:
+        store = TaskStorage(self.task_root)
+        return store.initialize_state(
+            {
+                "artifact_type": "pipeline_state",
+                "schema_id": "urn:capcut:remix-reference-video:artifact:pipeline-state",
+                "schema_version": "1.0.0",
+                "contract_version": "2.0.0-alpha.1",
+                "skill_version": "2.0.0-alpha.1",
+                "execution_mode": "track-b-production",
+                "run_id": run_id or str(uuid.uuid4()),
+                "state_revision": 0,
+                "active_stage": None,
+                "active_command": None,
+                "stage_status": {"init": "succeeded"},
+                "gate_status": {
+                    "gate1": "not_ready",
+                    "gate2": "not_ready",
+                    "gate3_material_selection": "not_ready",
+                    "gate3_evidence_closure": "not_ready",
+                    "gate3": "not_ready",
+                    "gate4_pre_generation": "not_ready",
+                    "gate4_post_generation": "not_ready",
+                    "gate4": "not_ready",
+                    "gate5": "not_ready",
+                },
+                "decisions": [],
+                "artifacts": {},
+                "blockers": [],
+                "cache_summary": {},
+            }
+        )
+
+    def run(self, *, resume: bool = False, stage_id: str | None = None) -> CommandResult:
+        request_id = str(uuid.uuid4())
+        invocation_id = str(uuid.uuid4())
+        store = TaskStorage(self.task_root)
+        state = store.read_state()
+        before = self._revision(state)
+        idempotency_key = hashlib.sha256(
+            f"{state.get('run_id')}:{before}:{resume}:{stage_id or 'run'}".encode()
+        ).hexdigest()
+        pending = self._pending_gate(state)
+        if pending is not None:
+            return self._result(
+                store,
+                status="awaiting_user",
+                exit_code=3,
+                request_id=request_id,
+                invocation_id=invocation_id,
+                idempotency_key=idempotency_key,
+                before=before,
+                next_actions=(f"approve:{pending}",),
+            )
+        ready = [
+            node
+            for node in self.orchestrator.ready_nodes(state, retry_failed=resume)
+            if node.node_id in self.adapters
+        ]
+        if stage_id is not None:
+            ready = [node for node in ready if node.node_id == stage_id]
+            if not ready:
+                raise StorageError(f"production stage is not ready: {stage_id}")
+        if not ready:
+            return self._result(
+                store,
+                status="succeeded",
+                exit_code=0,
+                request_id=request_id,
+                invocation_id=invocation_id,
+                idempotency_key=idempotency_key,
+                before=before,
+            )
+        node = ready[0]
+        adapter = self.adapters[node.node_id]
+        attempt = self.orchestrator.new_attempt(node.node_id)
+        started_at = time.perf_counter()
+        with store.invocation_lock():
+            running = store.update_state(
+                lambda current: current
+                | {
+                    "active_stage": node.node_id,
+                    "active_command": "resume" if resume else ("stage" if stage_id else "run"),
+                    "stage_status": {**current["stage_status"], node.node_id: "running"},
+                    "blockers": [
+                        blocker
+                        for blocker in current.get("blockers", [])
+                        if not (
+                            blocker.get("category") == "stage_execution_failed"
+                            and blocker.get("stage_id") == node.node_id
+                        )
+                    ],
+                },
+                expected_revision=before,
+            )
+            store.append_event(
+                {
+                    "event_type": "command.started",
+                    "execution_stage_id": node.node_id,
+                    "attempt_id": attempt.attempt_id,
+                },
+                state_revision=self._revision(running),
+            )
+            try:
+                handoff = self.task_root / "stage_inputs" / f"{node.node_id}.json"
+                if handoff.exists() or handoff.is_symlink():
+                    validation = StageInputValidator(self.task_root).validate(
+                        handoff, expected_stage_id=node.node_id
+                    )
+                    if not validation.valid:
+                        raise StorageError(
+                            "invalid stage input: " + "; ".join(validation.errors)
+                        )
+                execution = adapter.execute(attempt_id=attempt.attempt_id)
+                self._seal_gate_review_package(store, node, adapter)
+                artifacts = self._artifact_records(adapter)
+            except BaseException as error:
+                elapsed = time.perf_counter() - started_at
+                failed = store.update_state(
+                    lambda current: current
+                    | {
+                        "active_stage": node.node_id,
+                        "active_command": None,
+                        "stage_status": {**current["stage_status"], node.node_id: "failed"},
+                        "blockers": [
+                            *current.get("blockers", []),
+                            {"category": "stage_execution_failed", "stage_id": node.node_id, "detail": str(error)},
+                        ],
+                    }
+                )
+                store.append_event(
+                    {"event_type": "command.failed", "execution_stage_id": node.node_id},
+                    state_revision=self._revision(failed),
+                )
+                store.append_metric(
+                    {
+                        "execution_stage_id": node.node_id,
+                        "attempt_id": attempt.attempt_id,
+                        "status": "failed",
+                        "wall_seconds": elapsed,
+                        "cache_status": "miss",
+                    }
+                )
+                raise
+            stop_gate = node.stop_gate or execution.get("stop_gate")
+            execution_state = execution.get("state_changes")
+            state_changes = dict(execution_state) if isinstance(execution_state, Mapping) else {}
+            succeeded = store.update_state(
+                lambda current: current
+                | {
+                    "active_stage": node.node_id,
+                    "active_command": None,
+                    "stage_status": {**current["stage_status"], node.node_id: "succeeded"},
+                    "gate_status": (
+                        {**current["gate_status"], str(stop_gate): "awaiting_user"}
+                        if stop_gate
+                        else current["gate_status"]
+                    ),
+                    "artifacts": {**current["artifacts"], **artifacts},
+                    "cache_summary": {
+                        **current["cache_summary"],
+                        node.node_id: {
+                            "status": execution.get("status"),
+                            "fingerprint": adapter.cache_fingerprint(),
+                        },
+                    },
+                }
+                | state_changes
+            )
+            store.append_event(
+                {
+                    "event_type": "command.awaiting_user" if stop_gate else "command.succeeded",
+                    "execution_stage_id": node.node_id,
+                    **({"gate_id": stop_gate} if stop_gate else {}),
+                },
+                state_revision=self._revision(succeeded),
+            )
+            store.append_metric(
+                {
+                    "execution_stage_id": node.node_id,
+                    "attempt_id": attempt.attempt_id,
+                    "status": "succeeded",
+                    "wall_seconds": time.perf_counter() - started_at,
+                    "cache_status": (
+                        "hit" if execution.get("status") == "cache_hit" else "miss"
+                    ),
+                }
+            )
+        return self._result(
+            store,
+            status="awaiting_user" if stop_gate else "succeeded",
+            exit_code=3 if stop_gate else 0,
+            request_id=request_id,
+            invocation_id=invocation_id,
+            idempotency_key=idempotency_key,
+            before=before,
+            next_actions=(f"approve:{stop_gate}",) if stop_gate else (),
+        )
+
+    def _seal_gate_review_package(
+        self, store: TaskStorage, node: object, adapter: StageAdapter
+    ) -> None:
+        stop_gate = getattr(node, "stop_gate", None)
+        if not isinstance(stop_gate, str) or not stop_gate:
+            return
+        package_path = self.task_root / "gate_review_packages" / f"{stop_gate}.json"
+        if not package_path.is_file() or package_path.is_symlink():
+            raise StorageError(f"missing Gate review package: {package_path.name}")
+        package = read_json_object(package_path)
+        current = store.read_state()
+        predicted_revision = self._revision(current) + 1
+        input_hashes = package.get("input_hashes")
+        if not isinstance(input_hashes, Mapping) or not input_hashes:
+            input_hashes = {}
+            for declared in adapter.declared_outputs():
+                paths = sorted(declared.rglob("*")) if declared.is_dir() else [declared]
+                for path in paths:
+                    if not path.is_file() or path.is_symlink() or path == package_path:
+                        continue
+                    input_hashes[path.relative_to(self.task_root).as_posix()] = _sha256_file(path)
+        package.update(
+            {
+                "run_id": current.get("run_id"),
+                "gate_id": stop_gate,
+                "created_at": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                "state_revision": predicted_revision,
+                "input_hashes": dict(input_hashes),
+            }
+        )
+        atomic_write_json(package_path, package)
+
+    def _artifact_records(self, adapter: StageAdapter) -> dict[str, dict[str, str]]:
+        records: dict[str, dict[str, str]] = {}
+        for declared in adapter.declared_outputs():
+            paths = sorted(declared.rglob("*")) if declared.is_dir() else [declared]
+            for path in paths:
+                if not path.is_file() or path.is_symlink():
+                    continue
+                relative = path.relative_to(self.task_root).as_posix()
+                records[relative] = {"path": relative, "sha256": _sha256_file(path)}
+        return records
+
+    def _pending_gate(self, state: Mapping[str, object]) -> str | None:
+        gates = state.get("gate_status")
+        if not isinstance(gates, Mapping):
+            raise StorageError("gate_status must be an object")
+        for gate_id, status in gates.items():
+            if status in {"awaiting_user", "blocked", "stale", "rejected"}:
+                if gate_id == "gate5" and status == "awaiting_user":
+                    # RenderAdapter may mark Gate 5 awaiting before the DAG's
+                    # package-builder node has sealed the review package.
+                    # The package itself is the actual stop point.
+                    if not (
+                        self.task_root / "gate_review_packages" / "gate5.json"
+                    ).is_file():
+                        continue
+                return str(gate_id)
+        return None
+
+    @staticmethod
+    def _revision(state: Mapping[str, object]) -> int:
+        revision = state.get("state_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+            raise StorageError("state_revision must be a nonnegative integer")
+        return revision
+
+    @staticmethod
+    def _result(
+        store: TaskStorage,
+        *,
+        status: str,
+        exit_code: int,
+        request_id: str,
+        invocation_id: str,
+        idempotency_key: str,
+        before: int,
+        next_actions: tuple[str, ...] = (),
+    ) -> CommandResult:
+        state = store.read_state()
+        events = store.read_events()
+        return CommandResult(
+            status=status,
+            exit_code=exit_code,
+            request_id=request_id,
+            invocation_id=invocation_id,
+            idempotency_key=idempotency_key,
+            state_revision_before=before,
+            state_revision_after=ProductionRunner._revision(state),
+            event_sequence=0 if not events else int(events[-1]["sequence"]),
+            next_actions=next_actions,
+            error_code=None,
         )

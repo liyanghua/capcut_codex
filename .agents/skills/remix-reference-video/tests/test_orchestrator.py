@@ -79,6 +79,14 @@ class ProductionOrchestratorTests(unittest.TestCase):
         self.assertEqual(first.node_id, "split-reference")
         self.assertFalse(hasattr(self.orchestrator, "approve"))
 
+    def test_voice_preflight_precedes_gate4_package_and_tts(self) -> None:
+        node_ids = [node.node_id for node in default_dag()]
+
+        self.assertLess(node_ids.index("voice-preflight"), node_ids.index("build-gate4-pre-package"))
+        self.assertLess(node_ids.index("build-gate4-pre-package"), node_ids.index("generate-voice"))
+        package = next(node for node in default_dag() if node.node_id == "build-gate4-pre-package")
+        self.assertIn("voice-preflight", package.dependencies)
+
 
 if __name__ == "__main__":
     unittest.main()

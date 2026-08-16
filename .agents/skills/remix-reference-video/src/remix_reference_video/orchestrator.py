@@ -55,19 +55,23 @@ class ProductionOrchestrator:
                 )
             seen.add(node.node_id)
 
-    def ready_nodes(self, state: Mapping[str, object]) -> tuple[DAGNode, ...]:
+    def ready_nodes(
+        self, state: Mapping[str, object], *, retry_failed: bool = False
+    ) -> tuple[DAGNode, ...]:
         statuses = self.propagated_statuses(state)
         raw_gates = state.get("gate_status", {})
         gates = raw_gates if isinstance(raw_gates, Mapping) else {}
         ready: list[DAGNode] = []
         for node in self.nodes:
-            if statuses.get(node.node_id) in {
+            node_status = statuses.get(node.node_id)
+            if node_status in {
                 "running",
                 "succeeded",
                 "blocked",
-                "failed",
                 "stale",
             }:
+                continue
+            if node_status == "failed" and not retry_failed:
                 continue
             if any(statuses.get(dependency) != "succeeded" for dependency in node.dependencies):
                 continue
@@ -114,7 +118,8 @@ def default_dag() -> tuple[DAGNode, ...]:
         DAGNode("summarize-gate3", ("validate-script-evidence",), ("gate3_material_selection", "gate3_evidence_closure")),
         DAGNode("build-production-script", ("summarize-gate3",), ("gate3",), parallel_safe=True),
         DAGNode("materialize-approved-broad", ("summarize-gate3",), ("gate3",), parallel_safe=True),
-        DAGNode("build-gate4-pre-package", ("build-production-script", "materialize-approved-broad"), ("gate3",), "gate4_pre_generation"),
+        DAGNode("voice-preflight", ("build-production-script", "materialize-approved-broad"), ("gate3",)),
+        DAGNode("build-gate4-pre-package", ("voice-preflight",), ("gate3",), "gate4_pre_generation"),
         DAGNode("generate-voice", ("build-gate4-pre-package",), ("gate4_pre_generation",)),
         DAGNode("build-reconstruction-timeline", ("generate-voice", "materialize-approved-broad"), ("gate4_pre_generation",)),
         DAGNode("build-gate4-post-package", ("build-reconstruction-timeline",), ("gate4_pre_generation",), "gate4_post_generation"),

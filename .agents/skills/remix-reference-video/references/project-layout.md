@@ -41,6 +41,7 @@ work/YYYY-MM-DD[-slug]/
   script_evidence_matrix.json
   production_script_candidate.json
   approved_production_script.json
+  voice_preflight.json
   material_manifest.json
   match_validation_report.json
   material_validation_report.json
@@ -89,12 +90,14 @@ work/YYYY-MM-DD[-slug]/
 3. `shot_blueprint.json`、`content_baseline.json`：重构后的目标片段、叙事和内容基线。
 4. `mutation_plan.json`：允许/禁止变化、fallback 和失效规则。
 5. `matches.json`、`coverage_report.json`：全部候选、资格门禁、覆盖和评分证据。
-6. `fragment_plan.json`：Gate 3 批准的不可变素材来源、哈希和宽可用范围。
+6. `fragment_plan.json`：Gate 3 批准的不可变素材来源、哈希、媒体类型、宽可用范围和画面时长预算。
 7. `script_evidence_matrix.json`：逐句口播与已批准画面证据的闭环结果。
-8. `production_script_candidate.json` / `approved_production_script.json`：TTS 前脚本候选和 Gate 4 生成前唯一批准输入。
-9. `material_manifest.json`、`material/fragmentNN/`：Reconstruction 对批准宽范围的物理复制及副本。
-10. `reconstruction_timeline.json`：真实配音实测后的精确时间轴和裁点。
-11. `pipeline_state.json`：阶段状态、用户审批、阻塞原因和产物哈希；审批唯一权威。
+8. `production_script_candidate.json`：Gate 3 后编译的 TTS 候选文案。
+9. `voice_preflight.json`：候选文案相对 Gate 3 画面预算的生成前估算、margin 和阻塞结果。
+10. `approved_production_script.json`：预检通过后由 Gate 4 生成前批准的唯一 TTS 输入。
+11. `material_manifest.json`、`material/fragmentNN/`：Reconstruction 对批准宽范围的物理复制及副本。
+12. `reconstruction_timeline.json`：真实配音实测并再次通过范围校验后的精确时间轴和裁点。
+13. `pipeline_state.json`：阶段状态、用户审批、阻塞原因和产物哈希；审批唯一权威。
 
 三份校验报告按阶段分开且不可互相覆盖：`match_validation_report.json` 固化 Gate 3 选材输入，`material_validation_report.json` 校验 Gate 3 后的物理素材副本，`final_validation_report.json` 校验 Gate 5 成片。Gate 5 输出完成后，成片与三份 Gate 5 交付产物（`remix.mp4`、`final_validation_report.json`、`render_report.json`、`jianying_import_manifest.json`）的 SHA-256 必须回写 `pipeline_state.json.artifacts`，否则仍属于未登记的阶段产物。
 

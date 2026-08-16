@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_type": "g_b_pair_plan",
+  "runs": [
+    {"run_id": "v1-cold", "cache_status": "cold", "approval_namespace": "v1-cold"},
+    {"run_id": "v2-cold", "cache_status": "cold", "approval_namespace": "v2-cold"},
+    {"run_id": "v2-hot", "cache_status": "hot", "approval_namespace": "v2-hot"},
+    {"run_id": "v2-mutation", "cache_status": "controlled_mutation", "approval_namespace": "v2-mutation"}
+  ],
+  "shared_approvals": false,
+  "human_gate_wait_excluded_from_machine_path": true
+}

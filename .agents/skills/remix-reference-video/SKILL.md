@@ -11,12 +11,12 @@ description: Use when a project must turn a complete reference or viral video in
 
 ## V2 运行边界
 
-- 当前只允许一个 `manual-contract-only` V2 alpha pilot 按五阶段运行，用于采集 G-A 前向证据；它必须逐 Gate 停止。无论 Gate 5 结果如何，该 pilot 都不得归档到 `final/`、不得视为正式生产发布，也不得复用其批准。G-A 通过前，其他新生产任务继续使用稳定 V1 或等待迁移决定。
+- G-A 已由独立 clean harness pilot 通过，但该 pilot 仍是 `manual-contract-only`、不得归档到 `final/`，也不得复用其批准。Track B 后端正在按 B0 → B1/B4a → B2/B3 → B4 → B5 收口；在 G-B 和监督运营试用通过前，普通 V2 生产、共享生产缓存和一线发布仍保持关闭。
 - 当前 Skill 版本与行为契约版本均为 `2.0.0-alpha.1`；任务产物格式版本为独立的 `1.0.0`。V2 任务产物必须携带 `artifact_type`、`schema_id`、`schema_version`、`contract_version` 和 `skill_version`，以 `schemas/v2-alpha.registry.schema.json` 为 canonical registry。
-- Track B 执行器和 Track C 评分看板尚未启用。Track A 只提供 registry/envelope 静态检查，不提供完整字段 validator 或生产执行器。
-- 生产后端固化设计和实施计划已经确认，但不改变上述锁定边界：`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 与 `docs/superpowers/plans/2026-08-15-remix-production-backend.md` 只定义 G-A 通过后的 Track B 工作；G-A 前不得实现或启用真实五阶段生产运行时。
+- Track B 的 B0 状态/审批/事务、B1 reference split、B4a 增量索引、B2/B3/B4/B5 adapter 和只读进度投影已在开发分支实现并由隔离测试覆盖；正式 CLI 通过显式 `production_runtime_config.json` 加载 Native Registry，普通生产仍受 `manifest.json` 锁保护。唯一隔离例外 `gb-pair` 已完成真实 cold/hot Gate 1–5 配对，真实 FFmpeg/TTS、预算校验、代理检查和最终渲染均通过；当前结果为 `measured_pending_review`，G-B 仍需 V1 可比性与 owner 阈值复核，Track C 评分看板尚未启用。完整字段和媒体验收必须以本地测试与 G-B 冻结配对为准，不能由单个 adapter 测试替代。
+- 生产后端固化设计和实施计划是 Track B 的规范来源：`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 与 `docs/superpowers/plans/2026-08-15-remix-production-backend.md`。开发 runner 可以在隔离 fixture 中执行真实媒体 adapter；没有 G-B 和监督运营批准时，不得把它解释为一线生产发布。
 - G-A 前唯一新增的写工具是 WP-A2 Evidence Harness：它只为 owner 指定的 `manual-contract-only` clean pilot 生成 Gate 审核包、绑定结构化人工决定并做只读 G-A 审计；它不能执行五阶段媒体命令、启用缓存、归档、修改 manifest 或复用审批。
-- 实验性的 Fast Path v0 只提供单任务 Gate-aware 编排、续跑/计时和素材技术预索引；它不启用 Track B 或 V2 production。仅对隔离 fixture/明确的新实验任务使用 `fast`、`resume`、`index-assets`；当前 `manual-contract-only` pilot 只允许只读 `status/audit`。运行契约见 `references/fast-path-v0.md`。
+- Fast Path v0 只提供单任务 Gate-aware argv 编排、续跑/计时和素材技术预索引；生产 adapter 由受锁保护的 `init/run/stage/resume` 开发入口承载。普通任务和既有 `manual-contract-only` pilot 仍只允许契约规定的 `status/audit`；运行边界见 `references/fast-path-v0.md`。
 - 已开始的 V1 任务继续使用创建时契约，不自动取得 V2 授权。需要迁移时，先生成旧/新映射、输入哈希、失效 Gate 和重新确认清单。
 - `recipe.json` 是 Gate 1 后不可变的参考事实层。V2 的真实配音时长只写入 `voice/` 报告和 `reconstruction_timeline.json`，不原地回写参考事实。
 - `fragment_plan.json` 是 Gate 3 已批准的不可变宽范围契约，不是物化状态或最终渲染计划。若历史生成器留下与批准状态冲突的描述字段，不要原地修订已批准文件；以 `material_manifest.json` / `material_validation_report.json` 的当前输入哈希和校验结果为物化事实，并在阶段评估中记录元数据债务。
@@ -51,13 +51,13 @@ V1 的交付包是：MP4、旁路 SRT、旧版 `validation_report.json`、`rende
 | --- | --- | --- |
 | **Gate 1 — 镜头切分** | 参考流信息、`recipe.json`、镜头表、关键帧/接触表、可疑切点和例外 | 目标结构与声明规划 |
 | **Gate 2 — 内容基线与受控变更** | `shot_blueprint.json`、`content_baseline.json`、`mutation_plan.json`、批准卖点、禁用声明、fallback、时长包络 | 权威素材覆盖与匹配 |
-| **Gate 3 选材确认** | `matches.json`、候选接触表/微视频、拟选素材、分数、叠字、重复/连续性检查、缺素材、宽可用范围 | 形成不可变宽范围 `fragment_plan.json` |
+| **Gate 3 选材确认** | `matches.json`、候选接触表/微视频、拟选素材、分数、叠字、重复/连续性检查、缺素材、宽可用范围及视频画面时长预算 | 形成不可变宽范围 `fragment_plan.json`；视频预算为范围差值，图片预算为 `null` |
 | **Gate 3 证据闭环** | `script_evidence_matrix.json`，逐句口播与已批准画面证据、动作完整性和 fallback 决定 | 编译 `production_script_candidate.json`；两个子状态都通过前不得进入完整生产 |
-| **Gate 4 生成前** | `production_script_candidate.json`、最终文案、协议/模型标签、音色、语速和发音风险 | 原子提升 `approved_production_script.json`，允许真实 TTS |
+| **Gate 4 生成前** | `production_script_candidate.json`、`voice_preflight.json`、逐段画面预算/配音估算/margin、最终文案、协议/模型标签、音色、语速和发音风险 | 预检通过后原子提升 `approved_production_script.json`，允许真实 TTS |
 | **Gate 4 生成后** | 实际音频、实测时长、字幕、`reconstruction_timeline.json`、精确裁点和听审风险 | 代理/边界检查和最终渲染 |
 | **Gate 5 — 最终预览** | MP4、SRT、`final_validation_report.json`、`render_report.json`、`jianying_import_manifest.json` 和未决风险 | 普通生产任务可把批准 MP4 归档到 `final/`；pilot 只保留 G-A 证据，不归档 |
 
-Gate 3 只有 `gate3_material_selection` 和 `gate3_evidence_closure` 都对当前输入哈希为 `approved` 时，汇总状态才可为 `approved`。Gate 4 也包含两个必需决定：先批准最终生产脚本和声音设置，再调用真实 TTS；生成后按“实测时长 → 精确裁点/累计时间轴 → 听审实际音频”批准。任何子状态未齐全时保持 `awaiting_user`，不得以“文件已生成”代替人工批准。
+Gate 3 只有 `gate3_material_selection` 和 `gate3_evidence_closure` 都对当前输入哈希为 `approved` 时，汇总状态才可为 `approved`。Gate 4 也包含两个必需决定：先用 Gate 3 画面预算完成 `voice_preflight`，再批准最终生产脚本和相同语速的声音设置并调用真实 TTS；生成后按“实测时长校验 → 精确裁点/累计时间轴 → 听审实际音频”批准。任何子状态未齐全时保持 `awaiting_user`，不得以“文件已生成”代替人工批准。
 
 Gate 4 生成前只能接受对当前审核包的明确业务确认，例如：`Gate 4 生成前通过，按当前文案和音色生成。` “开始实施”“直接做”“继续”或已有 Gate 3 批准均不构成该授权。
 
@@ -86,7 +86,7 @@ Gate 4 生成前只能接受对当前审核包的明确业务确认，例如：`
 
 完整读取 `references/material-matching.md`。看真实画面而不是只看文件名；记录 SHA-256 和感知重复；先过语义、动作、产品、场景、构图、裁切、叠字、身份连续和技术资格，再评分。
 
-没有合格候选时保留 `missing_material`，不得拿无关素材凑数。Gate 3 只批准素材来源、哈希、叠字决定和足够宽的源时间范围；不可变 `fragment_plan.json` 不写最终精确裁点。两个 Gate 3 子状态汇总通过后，Reconstruction 才从 `assets/` **复制**批准宽范围到 `material/fragmentNN/`，并写 `material_manifest.json`，不得移动或破坏原文件。
+没有合格候选时保留 `missing_material`，不得拿无关素材凑数。Gate 3 只批准素材来源、哈希、媒体类型、叠字决定和足够宽的源时间范围；视频同步冻结 `visual_duration_budget_seconds=end-start`，图片为 `null`；不可变 `fragment_plan.json` 不写最终精确裁点。两个 Gate 3 子状态汇总通过后，Reconstruction 才从 `assets/` **复制**批准宽范围到 `material/fragmentNN/`，并写 `material_manifest.json`，不得移动或破坏原文件。
 
 逐句证据闭环必须把每句候选口播映射到已批准素材的证据帧/时间窗。无证据句子只能选择 Gate 2 已批准 fallback，或返回 Gate 2 改变声明/口播意图。
 
@@ -94,7 +94,7 @@ Gate 4 生成前只能接受对当前审核包的明确业务确认，例如：`
 
 完整读取 `references/voice-caption-timing.md`。只用批准文案和配置；不输出凭证，不把密钥写入清单。记录提供商、协议、模型标签、音色、参数、文件哈希和解码实测时长。
 
-真实 TTS 的唯一文本输入是 Gate 4 生成前批准的 `approved_production_script.json`。用累计实测语音端点生成 `reconstruction_timeline.json` 和字幕，再在 Gate 3 批准的宽范围内确定精确裁点；不把配音强压回参考时长。画面默认保持 `1.00x`；字幕按语义断句，不越界、不重叠、不产生孤立短 cue。
+先用生产脚本候选、Gate 3 画面预算、字数、标点停顿、音色历史平均语速和拟用语速生成 `voice_preflight.json`。任一视频片段 `voice_duration_estimate_seconds > visual_duration_budget_seconds` 时，在调用 TTS 前阻断，并只允许缩短文案、采用 Gate 2 fallback、扩大 Gate 3 范围或返回 Gate 2 调整结构。真实 TTS 的唯一文本输入是 Gate 4 生成前批准的 `approved_production_script.json`，且审批语速必须与预检一致。TTS 后仍用实测时长再次校验；超预算时不得自动变速、冻结尾帧或越过 Gate 3 范围。通过后才用累计实测语音端点生成 `reconstruction_timeline.json` 和字幕，并在 Gate 3 批准范围内确定精确裁点。画面默认保持 `1.00x`；字幕按语义断句，不越界、不重叠、不产生孤立短 cue。
 - Gate 4 生成后听审通过前，不得运行正式渲染；只要精确裁点超出宽范围，就返回受影响的 Gate 3 子状态。
 
 ### 6. 渲染、验证并完成 Gate 5
@@ -108,6 +108,7 @@ Gate 4 生成前只能接受对当前审核包的明确业务确认，例如：`
 ## 不可妥协的失败规则
 
 - 缺素材或不合格素材：返回 Gate 3；若需要删并段或改变声明，记录请求并返回 Gate 2。占位仅在 Brief 明确允许的审核模式使用，绝不能进入 `final/`。
+- `voice_preflight` 超预算：不得调用 TTS；缩文案或 fallback 使 Gate 4 候选重新审核，扩画面使受影响 Gate 3/4 stale，结构变化返回 Gate 2。
 - 删并段、重排、改声明、删口播或重构时间轴：返回最早受影响 Gate，并使下游批准失效。
 - 叠字、品牌、水印、产品可见度或裁切风险未决定：保持 review-required，不得声称 production-ready。
 - 哈希不符、路径逃逸、源范围越界、时间轴 gap/overlap、报告过期或审批 stale：渲染或提升前失败。
@@ -122,4 +123,6 @@ Gate 4 生成前只能接受对当前审核包的明确业务确认，例如：`
 - `references/rendering-qc.md`：渲染、原子提升、媒体/SRT 验证、导入清单和审片。
 - `references/fast-path-v0.md`：实验执行器、素材预索引、命令、退出码、产物和生产锁边界。
 - `schemas/v2-alpha.registry.schema.json`：Track A 的 V2 artifact identity、版本轴和共同 metadata envelope；完整字段 schema 延后到 Track B。
+- `stage_inputs/<stage>.json`：Agent/运营到阶段 adapter 的只读交接契约；必须绑定当前上游文件 SHA-256 和阶段 ID，不能携带或替代 Gate 审批。执行器和 `audit` 会拒绝路径逃逸、symlink、哈希不匹配和审批伪字段。
+- Native Registry v0：正式 CLI 的 `production-run|production-resume|production-stage` 通过 runtime config 构建 registry；隔离 Runner 按规范 DAG 调用 Blueprint、Mutation、Coverage、Match、Gate 3、Reconstruction、TTS、Timeline、Render 和 Archive adapter；端到端 fixture 已验证 `run → approve-gate → resume` 到 Gate 5。`gb-pair` 只用于冻结案例测量，不改变 manifest 的 Track B 锁，也不允许 adapter 自行审批或复制审批。
 - `assets/project_brief.yaml`：复制使用的 Brief 模板；单次任务不得修改安装模板。
