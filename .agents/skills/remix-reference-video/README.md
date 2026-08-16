@@ -38,18 +38,33 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py --help
 
 ## 新 V2 case
 
-新 case 需要准备：
+新 case 先由 Skill 完成 Stage 0 输入预检和冻结输入准备。`gb-pair` 本身不会猜测产品事实、声明或素材哈希；进入配对前，冻结目录必须已经包含：
 
 ```text
 frozen-root/
   reference-*.mp4
-  project_brief.yaml
+  project_brief.json
   asset_profiles.json
   g_b_frozen_input_snapshot.json
 assets/
 ```
 
-冻结输入必须包含参考片、Brief、素材画像和源素材快照。运行隔离 cold/hot 配对：
+如果只有参考视频、素材目录和产品信息，先在 Codex 新窗口发送下面的启动指令，让 Skill 补齐 Brief 草案、素材画像和冻结快照；缺少必要信息时它必须暂停并向运营提问：
+
+```text
+使用 $remix-reference-video 创建一个新的参考视频复刻任务。
+
+参考视频：<绝对路径>
+自有素材目录：<绝对路径>
+产品和目标：<产品、平台、受众、已批准卖点、禁用声明>
+任务名称：<英文短名称>
+
+先完成 Stage 0，生成冻结输入草案并展示缺失项；不要编造产品事实、声明或素材。
+当前普通 V2 production 仍受锁保护，准备完成后使用隔离 gb-pair。
+从 Gate 1 开始逐 Gate 停止，等待我明确审批；不复用历史任务、cold/hot 或其他 case 的审批。
+```
+
+冻结输入经运营确认后，运行隔离 cold/hot 配对：
 
 ```bash
 python3 .agents/skills/remix-reference-video/scripts/remixctl.py gb-pair \
@@ -69,6 +84,20 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py gb-pair \
 3. 只在 cold Gate 5 完成后复制声明的 SQLite 技术缓存；
 4. 使用真实 `ffprobe`、`ffmpeg` 和 TTS 生成、检查并登记成片；
 5. 输出 `gb_measurement.json`，记录机器时间、缓存、审批隔离和未测量项。
+
+每个 Gate 的业务审批可以直接使用：
+
+```text
+Gate 1 通过，进入 Gate 2。
+Gate 2 通过，进入 Gate 3 选材。
+Gate 3 选材通过，进入证据闭环。
+Gate 3 证据闭环通过，进入 Gate 4 生成前审核。
+Gate 4 生成前通过，按当前文案、音色和语速生成。
+Gate 4 生成后通过，进入正式渲染。
+Gate 5 最终预览通过。
+```
+
+Gate 5 前的成片只能留在 `work/`；即使隔离配对完成，也不能将测量结果解释为 G-B 正式通过。
 
 如果现有配对目录已通过部分 Gate，可显式续跑：
 

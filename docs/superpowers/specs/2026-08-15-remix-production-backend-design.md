@@ -566,7 +566,7 @@ ga-audit
 
 - `docs/reference-video-remix-optimization-plan.md`：更新替代 pilot 结论、Track B 固化路径、依赖图和当前锁定状态；
 - `docs/reference-video-remix-backend-first-technical-design.md`：以本规格为确认基线，补齐统一命令、adapter、审批事务、缓存和恢复；
-- `AGENTS.md`：记录成片通过、替代 G-A 未通过、下一阶段允许/禁止事项；
+- `AGENTS.md`：记录 G-A 已通过、真实 cold/hot 配对状态、G-B 待复核和下一阶段允许/禁止事项；
 - `.agents/skills/remix-reference-video/manifest.json`：本轮保持不变，继续 `track_b=locked_until_g_a`；
 - pilot 目录：不修改任何 artifact、Gate 决定或审批时间。
 

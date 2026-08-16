@@ -11,7 +11,7 @@ description: Use when a project must turn a complete reference or viral video in
 
 ## V2 运行边界
 
-- G-A 已由独立 clean harness pilot 通过，但该 pilot 仍是 `manual-contract-only`、不得归档到 `final/`，也不得复用其批准。Track B 后端正在按 B0 → B1/B4a → B2/B3 → B4 → B5 收口；在 G-B 和监督运营试用通过前，普通 V2 生产、共享生产缓存和一线发布仍保持关闭。
+- G-A 已由独立 clean harness pilot 通过，但该 pilot 仍是 `manual-contract-only`、不得归档到 `final/`，也不得复用其批准。Track B 后端已按 B0 → B1/B4a → B2/B3 → B4 → B5 实现并合并到主干；在 G-B 和监督运营试用通过前，普通 V2 生产、共享生产缓存和一线发布仍保持关闭。
 - 当前 Skill 版本与行为契约版本均为 `2.0.0-alpha.1`；任务产物格式版本为独立的 `1.0.0`。V2 任务产物必须携带 `artifact_type`、`schema_id`、`schema_version`、`contract_version` 和 `skill_version`，以 `schemas/v2-alpha.registry.schema.json` 为 canonical registry。
 - Track B 的 B0 状态/审批/事务、B1 reference split、B4a 增量索引、B2/B3/B4/B5 adapter 和只读进度投影已在开发分支实现并由隔离测试覆盖；正式 CLI 通过显式 `production_runtime_config.json` 加载 Native Registry，普通生产仍受 `manifest.json` 锁保护。唯一隔离例外 `gb-pair` 已完成真实 cold/hot Gate 1–5 配对，真实 FFmpeg/TTS、预算校验、代理检查和最终渲染均通过；当前结果为 `measured_pending_review`，G-B 仍需 V1 可比性与 owner 阈值复核，Track C 评分看板尚未启用。完整字段和媒体验收必须以本地测试与 G-B 冻结配对为准，不能由单个 adapter 测试替代。
 - 生产后端固化设计和实施计划是 Track B 的规范来源：`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 与 `docs/superpowers/plans/2026-08-15-remix-production-backend.md`。开发 runner 可以在隔离 fixture 中执行真实媒体 adapter；没有 G-B 和监督运营批准时，不得把它解释为一线生产发布。
@@ -31,6 +31,37 @@ description: Use when a project must turn a complete reference or viral video in
 4. 执行 **Stage 0 — Brief 完整性预检**：检查必填字段、参考视频、素材根目录、输出规格和本阶段所需工具。缺失时补问并暂停。
 
 Stage 0 只是预检，不是 Gate，也不代表用户批准任何后续产物。不得复用旧案例的绝对路径、日期、片段数、时长、凭证或审批状态。
+
+### 新任务启动模板
+
+当运营只有参考片、素材目录和产品信息时，先让 Skill 完成 Stage 0，不要直接调用 `gb-pair`。推荐在新的 Codex 窗口发送：
+
+```text
+使用 $remix-reference-video 创建一个新的参考视频复刻任务。
+参考视频：<绝对路径>
+自有素材目录：<绝对路径>
+产品和目标：<产品、平台、受众、已批准卖点、禁用声明>
+任务名称：<英文短名称>
+先完成 Stage 0，生成 Brief 草案、素材画像和冻结输入草案；缺少信息就暂停提问，不编造事实。
+当前普通 V2 production 仍受锁保护，输入冻结后使用隔离 gb-pair。
+从 Gate 1 开始逐 Gate 停止，等待我明确审批，不复用任何历史或其他运行的审批。
+```
+
+进入 `gb-pair` 前，`frozen-root/` 必须已经有唯一 `reference-*.mp4`、`project_brief.json`、`asset_profiles.json` 和 `g_b_frozen_input_snapshot.json`；素材根目录必须能按快照哈希校验。CLI 不会替运营推断产品声明或悄悄生成冻结事实。
+
+新任务的当前入口顺序是：
+
+```text
+Stage 0 输入预检
+→ 冻结参考片/Brief/素材快照
+→ 隔离 gb-pair cold
+→ Gate 1 → Gate 2 → Gate 3 → Gate 4 → Gate 5
+→ 复制声明的 cold 技术 cache
+→ 隔离 gb-pair hot
+→ 生成 gb_measurement.json
+```
+
+历史 V1 任务不走这条入口，按创建时 V1 契约续跑；需要迁移时必须先生成映射、输入哈希、失效 Gate 和重新确认清单。
 
 ## V1 边界
 

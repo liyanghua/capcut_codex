@@ -1,7 +1,7 @@
 # 参考视频复刻 Skill 性能与效果优化方案
 
-版本：2026-08-15  
-状态：Track A 静态护栏与独立 clean harness 的 G-A 已通过；替代 pilot 已形成 Gate 5 成片证据但仍保留在 `work/`，不能作为 golden fixture 或复用审批。Track B 后端按计划实施中，普通 V2 生产与 Track C 继续锁定。详见 `docs/g-a-assessment-2026-08-15.md`、`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 和 `docs/superpowers/plans/2026-08-15-remix-production-backend.md`。
+版本：2026-08-16
+状态：Track A 静态护栏与独立 clean harness 的 G-A 已通过；Track B Native Runner、审批服务、真实媒体 adapter 和正式 CLI 已合并到主干。真实 cold/hot 配对已完成 Gate 1–5，当前为 `measured_pending_review`；V2 新版本基线见 `docs/remix-production-v2-baseline-report-2026-08-16.md`。普通 V2 生产、共享生产缓存与 Track C 仍等待 G-B 和监督运营试用。详见 `docs/g-a-assessment-2026-08-15.md`、`docs/superpowers/specs/2026-08-15-remix-production-backend-design.md` 和 `docs/remix-production-backend-implementation-status.md`。
 适用范围：`.agents/skills/remix-reference-video/` 及其后续确定性执行工具  
 关联文档：`docs/reference-video-remix-sop.md`、`AGENTS.md`
 
@@ -13,11 +13,11 @@
 
 替代 pilot 为 `work/2026-08-15-tablemat-ga-replacement-pilot/`。该任务最终 27.936 秒成片已通过 Gate 5，但 Fast Path 只读审计报告 `unsupported execution_mode`、`state_revision=null`、`event_count=0`，且存在 Gate 3 范围扩展与 Gate 4 生成前批准的时间线倒置。因此它只能作为成片与人工路径评估证据，不能作为 golden fixture、不能复用批准、不能直接解锁普通 V2 生产、不能归档到 `final/`。
 
-### 当前后端固化边界（2026-08-15）
+### 当前后端固化边界（2026-08-16）
 
-- G-A 通过后允许按 B0 → B1/B4a → B2/B3 → B4 → B5 顺序实现确定性执行器；当前 native runner 和真实参考切分已在隔离任务验证，普通 V2 生产、共享生产缓存和一线发布仍等待 G-B 与监督运营试用。
+- G-A 通过后已按 B0 → B1/B4a → B2/B3 → B4 → B5 顺序实现确定性执行器；Native Runner 已通过真实 cold/hot 配对，普通 V2 生产、共享生产缓存和一线发布仍等待 G-B 与监督运营试用。
 - `pipeline_state.json` 是唯一状态/审批权威；`approve-gate` 必须使用 schema 校验的结构化决定文件、当前审核包哈希、trusted server timestamp 和 state revision。
-- FastAPI/SSE 只读投影与 `ProgressView` 契约已实现但真实 optional-extra 路由测试受环境依赖阻塞；Backlot 前端等待 G-B；manifest 保持 `track_b=locked_until_g_a`、`track_c=locked_until_g_b` 作为发布保险栓。
+- FastAPI/SSE 只读投影与 `ProgressView` 契约已实现但真实 optional-extra 路由测试受环境依赖阻塞；Backlot 前端等待 G-B；manifest 保持普通生产锁与 `track_c=locked_until_g_b` 作为发布保险栓。新 V2 case 当前通过隔离 `gb-pair` 运行，历史 V1 按创建时契约续跑。
 
 **sentence08 契约修复（2026-08-14）**：一次脚本编译曾把 Gate 2 批准的“铺好以后，日常使用都好打理。”静默改成“铺好以后，日常使用更省心。”。现已恢复 Gate 2 原句，并用当前 11 段素材重新生成 `script_evidence_matrix.json` 与 `production_script_candidate.json`；用户已明确通过修复后的 Gate 3 证据闭环。编译器和 Gate 4 适配器都校验候选句子必须等于 Gate 2 基线或命中已批准 fallback，防止该问题再次进入 TTS。Gate 4 生成前仍需单独确认最终文案与声音设置。
 
@@ -520,7 +520,7 @@ Gate 2 只批准内容基线；Gate 3 先批准素材源和宽可用范围，再
 优点：适合大量运营并发和集中监控。  
 缺点：当前案例量不足以支持该复杂度，开发与维护成本过高。
 
-结论：采用方案 B 作为 V2 目标生产基线；当前 pilot 只已采用其中的 Gate 顺序与静态契约，增量执行器仍属于锁定的 Track B，尚未实施。暂不建设方案 C。V1 任务继续按创建时契约续跑，不能把旧批准解释成 V2 授权；迁移与 schema 升级完成后仍只运行唯一 pilot，只有 G-A 通过后才允许普通新任务按 V2 生产契约启动。
+结论：采用方案 B 作为 V2 生产基线；Track B 增量执行器已经合并到主干并完成真实 cold/hot 配对。暂不建设方案 C。V1 任务继续按创建时契约续跑，不能把旧批准解释成 V2 授权；新 V2 case 先完成 Stage 0 冻结输入，再通过隔离 `gb-pair` 逐 Gate 运行。只有 G-B 和监督运营试用通过后，才允许普通新任务按 V2 production 入口启动。
 
 ## 6. 目标流程
 
@@ -576,7 +576,7 @@ Gate 5：最终预览
 1. 已经开始的 V1 任务默认继续按创建时的 V1 契约续跑，不自动迁移。
 2. V1 任务不得复用 V2 Gate 批准或把 V1 旧批准解释成 V2 授权。
 3. 用户明确要求迁移单个任务时，生成迁移报告，列出旧/新阶段映射、失效 Gate、输入哈希和需重新批准项。
-4. G-A 通过前，普通新任务不得作为 V2 生产任务启动；只允许 owner 指定一个 `manual-contract-only` V2 pilot，用人工契约和静态护栏采集 G-A 前向证据。该 pilot 不是生产发布，不进入 `final/`，不启用 Track B 执行器，也不能把 pilot 批准复用于其他任务。G-A 通过后，才允许普通新任务按 V2 契约进入生产。
+4. G-A 通过后，新 V2 case 先通过隔离 `gb-pair` 采集真实生产证据；该配对不是普通生产发布，不进入 `final/`，也不能复用其他任务审批。只有 G-B 和监督运营试用通过后，才允许普通新任务按 V2 production 入口启动。
 5. 共享技术缓存可以跨版本复用，但只有缓存 schema 和生成器版本都匹配时才可命中；审批和生产计划不能跨版本复用。
 
 ### 6.2 Gate 调整
@@ -1231,9 +1231,9 @@ Track C  评分卡 + 成熟度体系（观测仪表，瘦身版）
 
 | Track | 本质 | 实现成本 | 证据状态 | 启动前置 |
 |---|---|---|---|---|
-| A：五阶段与 Gate 契约迁移 | 文档/schema/模板 | 低（改 `AGENTS.md`/Skill/references/schema/template） | 静态迁移已完成；G-A 前向证据待采集 | 仅运行唯一 pilot，不开放普通 V2 生产 |
-| B：执行器与索引 | 重工程 | 高（新增 `scripts/`、缓存目录、锁） | 收益仍为 `modeled` | 门槛 G-A 通过 |
-| C：评分体系 | 观测仪表 | 中（计算器 + 看板） | 不是瓶颈，度量对象须先存在 | 门槛 G-B 通过 |
+| A：五阶段与 Gate 契约迁移 | 文档/schema/模板 | 低（改 `AGENTS.md`/Skill/references/schema/template） | 静态迁移与 G-A clean harness 已通过 | 已完成 |
+| B：执行器与索引 | 重工程 | 高（新增 `scripts/`、缓存目录、锁） | Native Runner 已实现；真实 cold/hot 为 `measured_pending_review` | G-B/监督运营待完成 |
+| C：评分体系 | 观测仪表 | 中（计算器 + 看板） | 最小 harness 已有；完整评分仍锁定 | 门槛 G-B 通过 |
 
 **硬规则：Track 之间只能顺序晋级，不得并行抢跑。** 未通过 G-A 不写或启动 V2 生产执行器；未通过 G-B 不建完整评分计算器/看板。任一门槛未达标时，停在当前 Track 复盘。Gate 1–5 的人工审核纪律在三条 Track 全程不变。
 
@@ -1350,7 +1350,7 @@ WP-C 验收（门槛 G-C）：评分卡能由机器自动生成、与已实测 `
 
 Phase 6 是 Track B 的出口门槛 G-B，同时为 Track C 的启动前置。目标：证明五阶段质量没有因提速回退、关键路径达到 13/8 分钟硬线，并为 `2.0.0-rc.1` 提供可回滚证据；正式 `2.0.0` 必须等待 G-C 及其后的 owner 发布批准。
 
-历史 V1 基线案例已经完成 TTS、正式技术渲染，并在其 V1 `pipeline_state.json` 中将 Gate 1–4 标为已通过、Gate 5 标为 `awaiting_user`。当前 V2 pilot 已完成并通过 Gate 1–5，具备真实 TTS、字幕、精确时间轴和成片，但 G-A 因一次已撤销的 Gate 3 越权记录未通过。历史 V1 的测量与审批状态分别为 `measurement_status=retrospective_baseline`、`approval_status=provisional`；当前 V2 pilot 仍为 `measurement_status=not_scored`，各阶段审批按 Gate 事实记录为 `approved`。两者都不能据此宣称完整端到端提速或普通 V2 发布质量已通过。
+历史 V1 基线案例已经完成 TTS、正式技术渲染，并在其 V1 `pipeline_state.json` 中将 Gate 1–4 标为已通过、Gate 5 标为 `awaiting_user`。早期 V2 pilot 已完成 Gate 1–5，但曾留下 Gate 3 越权失败记录；后续独立 clean harness 已通过 G-A，真实 Native Runner cold/hot 也已各自通过 Gate 1–5。历史 V1 的测量状态仍为 `retrospective_baseline`；当前 V2 配对的技术与效率状态为 `measured_pending_review`，质量仍为 `not_scored`。这些证据证明端到端后端可以运行，但不能据此宣称 G-B、普通 V2 发布质量或一线无监督使用已经通过。
 
 实施验证采用以下最小配对设计：
 

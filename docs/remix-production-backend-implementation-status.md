@@ -10,6 +10,8 @@ B0 的权威状态、可恢复事务、哈希绑定审批、显式 DAG、只读�
 
 2026-08-16 已把 Native Runner 接入正式 CLI：`production-run`、`production-resume`、`production-stage`、`production-status`、`production-audit` 使用显式 `production_runtime_config.json` 构建完整 Native Registry；普通 `run/stage/resume` 仍受 manifest 锁保护。新增受保护的 `gb-pair` 只接受 `g_b_frozen_input_snapshot.json`，为 cold/hot 创建独立任务、审批和缓存根目录。
 
+运营入口已同步到 `.agents/skills/remix-reference-video/README.md`：历史 V1 任务按创建时契约续跑；新 V2 case 先完成 Stage 0，准备 `project_brief.json`、`asset_profiles.json` 和 `g_b_frozen_input_snapshot.json`，再通过隔离 `gb-pair` 逐 Gate 执行。Skill 不会从文件名或空白信息推断产品声明，缺少冻结事实时必须暂停补齐。
+
 真实配对证据：`work/2026-08-16-gb-pair-real-2/gb_measurement.json`。cold 与 hot 均使用真实 `ffprobe/ffmpeg/TTS` 完成完整链路，Gate 1–5 均由各自当前审核包独立批准；cold 成片为 27.720 秒，hot 成片为 27.552 秒，均为 1080×1920、60fps，最终技术校验通过。11 个片段均为 matched，候选置信度为 0.934，保留源文字/水印；`fragment05=7.3–8.8s`、`fragment07=0–2.8s` 均在真实源范围内，实际 TTS 后未变速、未冻结尾帧。cold 与 hot 的决定完全隔离，hot `run_id=gb-hot-1786872405`、`state_revision=74`。Gate 5 后仅复制声明的 SQLite cache；hot 首次启动复用冷快照，后续续跑保留 hot 自己的增量索引，不再次覆盖。配对结果当前为 `measured_pending_review`，同时已作为 V2 `measured_baseline_v0` 记录在 `docs/remix-production-v2-baseline-report-2026-08-16.md`：机器关键路径累计 cold 32.178 秒、hot 36.183 秒，已证明真实执行链路和缓存/审批隔离可运行；但人工等待、运营触达、完整 Track C 质量分和 owner G-B 阈值尚未测量/复核，因此普通 V2 生产、共享缓存和一线发布仍保持关闭。
 
 ## 已实现

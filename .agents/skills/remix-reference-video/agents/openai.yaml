@@ -1,4 +1,4 @@
 interface:
   display_name: "参考视频复刻成片"
   short_description: "参考视频复刻：五阶段、双子 Gate 与可追溯审核"
-  default_prompt: "使用 $remix-reference-video 从 Brief 开始；按当前契约模式逐 Gate 生成审核包并停下等待确认。只有稳定生产版本或明确的 manual-contract-only V2 pilot 才能继续，pilot 不得直接归档发布。"
+  default_prompt: "使用 $remix-reference-video 从参考视频、素材目录和产品 Brief 开始；先完成 Stage 0 和冻结输入检查，再按当前契约通过隔离 gb-pair 逐 Gate 生成审核包并停下等待确认。历史 V1 按创建时契约续跑；普通 V2 production 在 G-B/监督运营通过前仍锁定，隔离配对不得直接归档发布。"

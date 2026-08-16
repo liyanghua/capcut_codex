@@ -1,10 +1,10 @@
 # 参考视频复刻运营 SOP
 
-版本：2026-08-14  
+版本：2026-08-16
 适用对象：一线运营、内容审核、剪辑协作人员  
 适用范围：以一条完整参考视频为结构依据，从 `assets/` 选择替换素材，生成新配音和最终预览，并在确认后归档成片。V1/V2 默认都生成 `jianying_import_manifest.json`，但没有专用适配器和明确授权时不生成新版加密剪映草稿。
 
-当前状态：Track A 静态护栏已通过；V2 pilot 已完成并通过 Gate 1–5，但 G-A 因一次已撤销的 Gate 3 越权记录未通过，Track B/C 继续锁定。当前 `skill_version=2.0.0-alpha.1`、`contract_version=2.0.0-alpha.1`；V2 新建机器产物使用 `schema_version=1.0.0` 并声明 `artifact_type`、`schema_id`，canonical registry 为 `.agents/skills/remix-reference-video/schemas/v2-alpha.registry.schema.json`。历史 V1 产物继续保留 `schema_version=1.0`，不得就地改写。静态检查器不覆盖 trigger 行为、完整产物 shape 或生产媒体比较；Track A 收口已另行完成 trigger 前向评测和媒体摘要对比，完整 shape 校验仍延后到 Track B。G-A 结论见 `docs/g-a-assessment-2026-08-15.md`。
+当前状态：Track A 静态护栏和 G-A clean harness 已通过；Track B Native Runner、Approval Service、真实媒体 adapter 和正式 CLI 已合并到主干。真实 cold/hot 配对已完成 Gate 1–5，当前记录为 `measured_pending_review`，V2 基线报告见 `docs/remix-production-v2-baseline-report-2026-08-16.md`。在 G-B 和监督运营试用通过前，普通 V2 production、共享生产缓存和一线无监督发布仍保持关闭；新 V2 case 使用隔离 `gb-pair`。当前 `skill_version=2.0.0-alpha.1`、`contract_version=2.0.0-alpha.1`；V2 新建机器产物使用 `schema_version=1.0.0` 并声明 `artifact_type`、`schema_id`，canonical registry 为 `.agents/skills/remix-reference-video/schemas/v2-alpha.registry.schema.json`。历史 V1 产物继续保留 `schema_version=1.0`，不得就地改写。静态检查器不覆盖完整生产质量；真实媒体验证以冻结配对和本地测试为准。
 
 当前 pilot 的 sentence08 已恢复为 Gate 2 批准原句“铺好以后，日常使用都好打理。”，修复后的 Gate 3 证据闭环已获用户通过。编译器和 Gate 4 适配器必须继续校验每句候选等于 Gate 2 基线或命中已批准 fallback，禁止静默改句。
 
@@ -29,16 +29,28 @@
 
 ### 一线运营最短操作路径
 
-开工前先确认模式：只有 owner 明确标记为唯一 `manual-contract-only` V2 pilot 的任务，才使用下面的 V2 五阶段路径采集 G-A 证据；其他新任务继续使用稳定 V1 或等待迁移决定，运营不得自行把普通任务升级为 pilot。
+当前新任务分两类：已经开始的 V1 任务按创建时契约续跑；新 V2 case 先冻结输入，再通过隔离 `gb-pair` 运行。普通 `production-run` 在 G-B/监督运营通过前仍不可用。
 
-1. 从 `.agents/skills/remix-reference-video/assets/project_brief.yaml` 复制 Brief 模板到当次 `work/` 目录。
-2. 填写参考视频、产品、受众、已批准卖点、禁用声明、素材库和配音要求。
-3. 向 Codex 说：「使用 `$remix-reference-video`，从这份 Brief 开始。」
+1. 准备完整参考视频、自有素材目录、产品信息、平台、受众、已批准卖点和禁用声明。
+2. 在新的 Codex 窗口打开项目根目录，向 Codex 发送：
+
+   ```text
+   使用 $remix-reference-video 创建一个新的参考视频复刻任务。
+   参考视频：<绝对路径>
+   自有素材目录：<绝对路径>
+   产品和目标：<产品、平台、受众、已批准卖点、禁用声明>
+   任务名称：<英文短名称>
+   先完成 Stage 0，生成 Brief 草案、素材画像和冻结输入草案；缺少信息就暂停提问。
+   当前普通 V2 production 仍受锁保护，准备完成后使用隔离 gb-pair。
+   从 Gate 1 开始逐 Gate 停止，等待我明确审批，不复用任何历史或其他运行的审批。
+   ```
+
+3. Stage 0 完成后确认 `frozen-root/` 中有唯一 `reference-*.mp4`、`project_brief.json`、`asset_profiles.json` 和 `g_b_frozen_input_snapshot.json`；CLI 不会替运营编造产品事实或声明。
 4. Gate 1 只审镜头切分；Gate 2 同时审内容基线和变更包；Gate 3 先审素材宽范围，再审逐句画面证据；Gate 4 先审生成前脚本/声音设置，生成后再听审实际音频和时间轴；Gate 5 审最终预览。
-5. 任一 Gate 出现缺素材、未批准卖点、错误发音或媒体问题时，选择补充、替换或返工，不要为了「先出片」直接通过。
-6. 只有 Gate 5 通过的版本才能进入 `final/`。
+5. 任一 Gate 出现缺素材、未批准卖点、错误发音或媒体问题时，选择补充、替换或返工，不要为了“先出片”直接通过。
+6. Gate 5 通过后，隔离配对仍保留在 `work/`，运行 `production-audit` 并等待 G-B/归档授权；不能直接迁移到 `final/`。
 
-pilot 例外：即使 pilot 走完 Gate 5，也只形成 G-A 评估材料，不迁移到 `final/`；只有 G-A 通过并由 owner 解锁普通 V2 生产后，后续普通任务才适用归档规则。
+历史 V1 任务继续使用原 V1 产物和审批；如需迁移，先生成旧/新阶段映射、输入哈希、失效 Gate 和重新确认清单。
 
 ## 2. 不可违反的工作原则
 
