@@ -67,7 +67,7 @@
 - cold/hot 使用不同 `run_id`、审核包、决定记录和输出目录；
 - 质量、效率和审批安全均不得相对当前已批准 V2 基线回退。
 
-该 policy 必须进入 G-B owner 复核包并由 owner 明确批准。
+该 policy 必须进入 G-B owner 复核包并由 owner 明确批准。实现时 `Phase6Snapshot.build` 必须接受 `baseline_comparison` policy 对象；当 `require_v1_comparability=false` 且没有 V1 数据时，不能抛出“V1 comparability required”，而应按 14.2 生成 `not_evaluated` 结果。
 
 ### 3.2 G-B 必需证据
 
@@ -176,7 +176,7 @@ Track-B `phase6_score_snapshot.json` 每个阶段至少记录：
 
 职责：提交通过或驳回。
 
-必需输入：`run_id`、canonical `gate_id`、`review_package_hash`、`state_revision`、`scope_type`、`scope_ids`、`strategy`、`decision`、幂等键和可选备注。UI `request_changes` 映射为 B0 的 `changes_requested`；UI `approve/reject` 映射为 `approved/rejected`。
+必需输入：`review_identity`、canonical `gate_id`、`review_package_hash`、`state_revision`、B0 原生 `scope_type`、`scope_ids`、`strategy`、`decision`、幂等键和可选备注。B0 `scope_type` 只允许 `artifact_set`、`fragment_set`、`script_settings`、`output_bundle`；工作台展示层的 material/content/evidence 名称必须在 adapter 中转换为这四类，不得写入未知 scope。UI `request_changes` 映射为 B0 的 `changes_requested`；UI `approve/reject` 映射为 `approved/rejected`。
 
 行为：服务端重新读取当前审核包、重算哈希、验证 predecessor 和 revision，再调用现有 B0 Approval Service。
 
@@ -376,6 +376,8 @@ Gate 3 `request_omit`、`request_merge`、`request_restructure` 只记录请求�
 
 `process_assessment.json` 另外记录 `first_pass_rate`、`defect_escape_rate`、`operator_touch_seconds`、`human_wait_seconds`、`rework_seconds`、`gate_return_count`、`cost_status`、`cost_inputs` 和各指标的 `measurement_status`。缺少来源写 `not_measured` 及原因。
 
+`first_pass_rate = 首次提交即获当前 Gate 最终批准的任务数 / 首次提交任务总数`；`defect_escape_rate = 下游首次发现且根因可归责当前阶段的缺陷数 / 当前阶段最终批准产物数`。`cost_status=not_measured` 时不填零，`cost_inputs` 必须列出模型、TTS、渲染、人工、补素材和重试来源。
+
 `content_quality_profile.json` 的 L1 `calibration_status=provisional` 只允许当前视频改版和人工复核，不允许跨视频排序、正式合格线或 G-B 通过结论。
 
 ### 9.3 决策请求
@@ -522,3 +524,109 @@ owner review package 状态为 `building -> ready_for_owner -> approved|rejected
 - 首版质量范围是 L0 + L1 + P，L2 只留反馈入口；
 - Gate 5 生产决定与离线质量决定分开；
 - 浏览器使用人工验收，不把 Playwright 视觉回归作为阻塞项。
+
+## 14. 规范化产物与运行契约
+
+### 14.1 artifact registry
+
+本设计新增或明确以下 artifact registry 条目；每项都使用 9.1 共同 envelope：
+
+| artifact_type | schema_id suffix | required status |
+| --- | --- | --- |
+| `phase6_score_snapshot` | `phase6-score-snapshot` | `measured|incomplete|provisional` |
+| `quality_scorecard` | `quality-scorecard` | `measured|incomplete|not_scored` (Track C only, after G-B) |
+| `content_quality_profile` | `content-quality-profile` | `provisional|measured|not_scored` |
+| `process_assessment` | `process-assessment` | `measured|incomplete|not_measured` |
+| `gate_review_view` | `gate-review-view` | `ready|stale|incomplete` |
+| `gate_review_sheet` | `gate-review-sheet` | `derived_review_only` |
+| `g_b_owner_review_package` | `gb-owner-review-package` | `building|ready_for_owner|approved|rejected|stale` |
+| `g_b_owner_decision` | `gb-owner-decision` | `approved|rejected` |
+
+`gate_review_view` 是 canonical JSON 展示模型；`gate_review_sheet` 是由 view 确定性生成的 HTML/Markdown 派生产物，二者不能互相替代。所有 snapshot 必须有 `input_hashes`、`source_versions`、`policy_id/version`、时间、幂等键和 supersedes 关系。`measurement_status`、`approval_status`、`efficiency_measurement_status` 作为 artifact-specific 字段单独保留，不压缩进共同 `status`。
+
+### 14.2 baseline comparison matrix
+
+`phase6_score_snapshot.baseline_comparison` 必须按指标记录 `pass|fail|not_evaluated`、source snapshot、threshold、reason 和 owner acknowledgement：
+
+| 指标 | 首次 V2 baseline | 后续 V2 run |
+| --- | --- | --- |
+| machine critical path | 与 780/480 秒硬门槛比较 | 与硬门槛和基线 P50 比较 |
+| quality score | 与 88/91 比较 | 与 88/91 和基线比较 |
+| rework/gate return | `not_evaluated`，policy 允许且 owner acknowledge | 与 `measured_baseline_v0` 比较 |
+| approval reuse/scope/timeline | 必须 `pass` | 必须 `pass` |
+
+`g_b_thresholds_met=true` 只表示所有适用硬门禁通过且所有 `not_evaluated` 项都被 policy 明确允许；复核包必须同时列出 `thresholds_not_evaluated`，owner 未确认时 package 仍为 `ready_for_owner` 而非 `approved`。L1 `content_quality_profile` 为 provisional 时只作改版指导，不影响该字段，也不能作为 G-B 质量通过依据。
+
+### 14.3 review identity and actor binding
+
+```json
+{
+  "run_id": "gb-hot-...",
+  "task_dir": "work/2026-08-17-case/hot",
+  "gate_id": "gate3_material_selection",
+  "review_package_hash": "sha256",
+  "state_revision": 42,
+  "session_id": "uuid",
+  "actor": "operator-a"
+}
+```
+
+`review_identity` 由服务端从当前 session 生成；浏览器只能引用 opaque `session_id`，不能提交 task_dir、actor 或 package hash 作为可信来源。启动参数 `--actor` 与 `--role operator|owner` 写入 session；owner API 只接受 `role=owner` 的 session。
+
+### 14.4 per-change payload shapes
+
+`change_request.payload` 不允许任意对象：
+
+- `copy`：`{"line_ids":["line02"],"text_by_id":{"line02":"..."}}`；
+- `claim_scope`：`{"claim_ids_add":[],"claim_ids_remove":["claim03"]}`，只允许 Gate 2 已批准 claim IDs 子集；
+- `voice`：`{"provider":"doubao-v3","speaker":"...","speed":1.0}`，speed 必须在已批准范围；
+- `material`：`{"fragment_id":"fragment04","candidate_id":"...","source_sha256":"...","overlay_decision":"keep|crop|replace"}`；
+- `range`：`{"fragment_id":"fragment04","start_seconds":0.0,"end_seconds":2.8}`，必须为数字且 containment 于 Gate 3 broad range；
+- `rerecord`：`{"fragment_ids":["fragment04"],"approved_text_sha256":"..."}`；
+- `boundary`：`{"boundary_id":"b03","issue_type":"flash|black_frame|audio_gap|color_jump"}`；
+- `structural`：`{"request_type":"omit|merge|restructure","reason":"...","affected_ids":["fragment04"]}`，只生成 Gate 2 request。
+
+每个 payload 都必须通过 schema、源 SHA、时间单位、claim/fragment ID 和当前审核包校验；只读影响预览和实际变更共享同一 validator。
+
+工作台动作到 B0 scope 的固定转换为：Gate 1/2 `artifact_set`；Gate 3 选材 `fragment_set`；Gate 3 证据 `artifact_set`；Gate 4 生成前 `script_settings`；Gate 4 生成后与 Gate 5 `output_bundle`。转换后才调用现有 ApprovalService，禁止新增自由 scope。
+
+### 14.5 timing and cache event shapes
+
+审核事件至少使用：
+
+```json
+{
+  "event_type": "review.evidence_interaction|review.heartbeat|review.pause|review.decision_submitted|review.decision_accepted|review.rework_completed",
+  "session_id": "uuid",
+  "run_id": "...",
+  "gate_id": "...",
+  "server_time": "...",
+  "attempt_id": "...",
+  "payload": {"evidence_id":"..."}
+}
+```
+
+机器 stage 时间只来自 `command.started`/`command.succeeded` 事件和 `execution_stage_id`；`rework_completed` 由 Runner 在受影响 Gate 重新生成审核包时写入。重复 event ID 幂等忽略，session 无心跳 60 秒自动 pause。
+
+每个 stage cache fact 至少使用 canonical `execution_stage_id`、`cache_source=empty|cloned_cold|hot_lookup|none`、hit/miss/reused/skipped 数量、开始/结束时间和 evidence path。`approvals_recorded` 只计 `approved|rejected|changes_requested` 的有效 decision record，按 decision_id 去重。
+
+### 14.6 run registry and owner transaction
+
+`workbench/run_registry.json` 是本机 API 的唯一 run 映射，条目包含 `run_id`、canonical `task_dir`、`execution_mode`、`g_b_frozen_input_snapshot_sha256`、创建时间和状态。CLI 创建/续跑时原子更新，禁止 symlink、路径逃逸、重复 run_id；缺失或 hash 不符返回 `404/409`，不从目录名推断。
+
+owner 决定 payload：
+
+```json
+{
+  "decision":"approved|rejected",
+  "package_sha256":"sha256",
+  "policy_id":"v2_forward_baseline_v1",
+  "policy_version":"1.0.0",
+  "input_snapshot_sha256":"sha256",
+  "acknowledge_not_evaluated":["rework_seconds","gate_return_count"],
+  "rejection_reasons":[],
+  "idempotency_key":"uuid"
+}
+```
+
+`g-b-owner-approve`/`g-b-owner-reject` 读取 `--role owner --actor` 启动身份，服务端生成可信时间和 decision ID。事务原子写入 `g_b_owner_decision.json`、owner review package 状态和审计事件；重复 payload 重放原结果，payload 冲突返回 `409`。该事务只更新 G-B evidence projection，不改变普通 production lock。
