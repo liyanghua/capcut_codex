@@ -88,11 +88,32 @@ class Phase6Snapshot:
     def build(
         self,
         *,
-        stage_scores: Mapping[str, object],
-        metrics: Mapping[str, object],
-        cache_status: str,
-        v1_metrics: Mapping[str, object] | None,
+        stage_scores: Mapping[str, object] | None = None,
+        metrics: Mapping[str, object] | None = None,
+        cache_status: str | None = None,
+        v1_metrics: Mapping[str, object] | None = None,
+        run_id: str | None = None,
+        state_revision: int | None = None,
+        framework_stages: Sequence[Mapping[str, object]] | None = None,
+        process_assessment: Mapping[str, object] | None = None,
+        baseline_result: Mapping[str, object] | None = None,
+        input_hashes: Mapping[str, str] | None = None,
+        lifecycle_status: str = "measured",
+        supersedes_snapshot_id: str | None = None,
     ) -> dict[str, object]:
+        if framework_stages is not None:
+            return self._build_evidence_bound(
+                run_id=run_id,
+                state_revision=state_revision,
+                framework_stages=framework_stages,
+                process_assessment=process_assessment or {},
+                baseline_result=baseline_result or {},
+                input_hashes=input_hashes or {},
+                lifecycle_status=lifecycle_status,
+                supersedes_snapshot_id=supersedes_snapshot_id,
+            )
+        if stage_scores is None or metrics is None or cache_status is None:
+            raise MeasurementError("legacy stage_scores, metrics, and cache_status are required")
         if set(stage_scores) != set(self.STAGES):
             raise MeasurementError("exactly five framework stage scores are required")
         scores: dict[str, float] = {}
@@ -137,4 +158,78 @@ class Phase6Snapshot:
             "human_wait_excluded_from_machine_path": True,
             "g_b_thresholds_met": thresholds_met,
             "owner_g_b_approval_required": True,
+        }
+
+    def _build_evidence_bound(
+        self,
+        *,
+        run_id: str | None,
+        state_revision: int | None,
+        framework_stages: Sequence[Mapping[str, object]],
+        process_assessment: Mapping[str, object],
+        baseline_result: Mapping[str, object],
+        input_hashes: Mapping[str, str],
+        lifecycle_status: str,
+        supersedes_snapshot_id: str | None,
+    ) -> dict[str, object]:
+        if not isinstance(run_id, str) or not run_id:
+            raise MeasurementError("run_id is required")
+        if len(framework_stages) != len(self.STAGES):
+            raise MeasurementError("exactly five framework stages are required")
+        rows: list[dict[str, object]] = []
+        scores: list[float] = []
+        for expected, raw in zip(self.STAGES, framework_stages):
+            if raw.get("framework_stage_id") != expected:
+                raise MeasurementError("framework stages must use canonical order")
+            items = raw.get("rubric_items")
+            status = raw.get("measurement_status")
+            if not isinstance(items, list):
+                raise MeasurementError(f"{expected} rubric_items must be an array")
+            valid = True
+            earned = max_points = 0.0
+            for item in items:
+                if not isinstance(item, Mapping) or not isinstance(item.get("rubric_id"), str) or not isinstance(item.get("evidence_paths"), list) or not item.get("evidence_paths") or not isinstance(item.get("reason"), str) or not item.get("reason"):
+                    valid = False; continue
+                ep, mp = item.get("earned_points"), item.get("max_points")
+                if isinstance(ep, bool) or not isinstance(ep, (int, float)) or isinstance(mp, bool) or not isinstance(mp, (int, float)) or mp <= 0 or ep < 0 or ep > mp:
+                    valid = False; continue
+                earned += float(ep); max_points += float(mp)
+            if status == "measured" and valid and max_points > 0:
+                score = round(earned / max_points * 100, 2); scores.append(score)
+                stage_status = "measured"
+            else:
+                score = None; stage_status = "not_scored"
+            rows.append({**dict(raw), "framework_stage_id": expected, "stage_output_quality_score": score, "measurement_status": stage_status})
+        quality = round(sum(scores) / len(scores), 2) if len(scores) == 5 else None
+        metrics = process_assessment.get("metrics") if isinstance(process_assessment.get("metrics"), Mapping) else {}
+        critical = metrics.get("machine_api_critical_path_seconds", {}) if isinstance(metrics, Mapping) else {}
+        critical_value = critical.get("value") if isinstance(critical, Mapping) else None
+        thresholds_not_evaluated = ["rework_seconds", "gate_return_count"] if baseline_result.get("require_v1_comparability") is False and baseline_result.get("baseline_status") == "establishing" else []
+        limit = 780 if baseline_result.get("run_role", "cold") == "cold" else 480
+        thresholds = quality is not None and quality >= 88 and all(row["stage_output_quality_score"] is not None and float(row["stage_output_quality_score"]) >= 88 for row in rows) and (critical_value is None or float(critical_value) <= limit)
+        return {
+            "artifact_type": "phase6_score_snapshot",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:phase6-score-snapshot",
+            "schema_version": "1.0.0",
+            "contract_version": "2.0.0-alpha.1",
+            "skill_version": "2.0.0-alpha.1",
+            "snapshot_id": f"snapshot-{run_id}-{state_revision if state_revision is not None else 0}",
+            "run_id": run_id,
+            "state_revision": state_revision,
+            "lifecycle_status": lifecycle_status,
+            "measurement_status": "measured" if quality is not None else "incomplete",
+            "approval_status": "provisional",
+            "framework_stages": rows,
+            "video_quality_score": quality,
+            "minimum_video_quality_score": 88,
+            "target_video_quality_score": 91,
+            "machine_api_critical_path_seconds": critical_value,
+            "process_assessment": process_assessment,
+            "baseline_comparison": baseline_result,
+            "thresholds_not_evaluated": thresholds_not_evaluated,
+            "g_b_thresholds_met": bool(thresholds and not (set(thresholds_not_evaluated) - set(baseline_result.get("allowed_not_evaluated_metrics", [])))),
+            "owner_g_b_approval_required": True,
+            "owner_acknowledgement_required": bool(thresholds_not_evaluated),
+            "input_hashes": dict(input_hashes),
+            "supersedes_snapshot_id": supersedes_snapshot_id,
         }

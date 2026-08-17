@@ -132,6 +132,7 @@ class ApprovalService:
         record: dict[str, Any] = {
             "decision_id": f"approval-{decision_key[:24]}",
             "decision_key": decision_key,
+            "run_id": state["run_id"],
             "gate_id": gate_id,
             "decision": decision["decision"],
             "scope_type": decision["scope_type"],

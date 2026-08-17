@@ -148,13 +148,14 @@ def main(argv: list[str] | None = None) -> int:
         fail("registry contract version mismatch")
     if contract.get("default_artifact_schema_version") != EXPECTED_ARTIFACT_SCHEMA_VERSION:
         fail("registry artifact schema version mismatch")
-    if contract.get("full_shape_validator") != "deferred_to_track_b":
-        fail("Track A registry must not claim full shape validation")
+    if contract.get("full_shape_validator") not in {"deferred_to_track_b", "snapshot_schema_validator"}:
+        fail("registry full shape validator declaration is invalid")
 
     artifacts = registry.get("x-artifacts")
     if not isinstance(artifacts, list):
         fail("registry x-artifacts must be a list")
-    active_types = {item.get("artifact_type") for item in artifacts if item.get("status") == "active"}
+    track_a_artifacts = [item for item in artifacts if item.get("track", "A") == "A"]
+    active_types = {item.get("artifact_type") for item in track_a_artifacts if item.get("status") == "active"}
     if active_types != EXPECTED_ACTIVE_ARTIFACTS:
         missing_types = sorted(EXPECTED_ACTIVE_ARTIFACTS - active_types)
         extra_types = sorted(active_types - EXPECTED_ACTIVE_ARTIFACTS)
@@ -165,11 +166,11 @@ def main(argv: list[str] | None = None) -> int:
         fail("registry artifact paths must be unique")
     if len(schema_ids) != len(set(schema_ids)):
         fail("registry artifact schema IDs must be unique")
-    if any(item.get("track") != "A" for item in artifacts):
-        fail("all active Track A registry artifacts must declare track A")
+    if any(item.get("track") not in {"A", "B"} for item in artifacts):
+        fail("registry artifacts must declare Track A or Track B")
     registered_pairs = {
         (item.get("artifact_type"), item.get("schema_id"))
-        for item in artifacts
+        for item in track_a_artifacts
         if item.get("status") == "active"
     }
     schema_pairs = set()
@@ -177,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         properties = branch.get("properties", {})
         artifact_type = properties.get("artifact_type", {}).get("const")
         schema_id = properties.get("schema_id", {}).get("const")
-        if artifact_type and schema_id:
+        if (artifact_type in EXPECTED_ACTIVE_ARTIFACTS or artifact_type == "stage_input") and schema_id:
             schema_pairs.add((artifact_type, schema_id))
     handoff = registry.get("x-stage-input-contract", {})
     handoff_pair = (handoff.get("artifact_type"), handoff.get("schema_id"))

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:phase6-score-snapshot",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "snapshot_id", "run_id", "measurement_status", "framework_stages", "g_b_thresholds_met", "owner_g_b_approval_required"],
+  "properties": {
+    "artifact_type": {"const": "phase6_score_snapshot"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:phase6-score-snapshot"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "measurement_status": {"enum": ["measured", "incomplete", "provisional", "not_scored"]},
+    "approval_status": {"enum": ["provisional", "awaiting_user", "approved", "blocked", "stale"]},
+    "framework_stages": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/stage"}},
+    "video_quality_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+    "minimum_video_quality_score": {"type": "number"},
+    "target_video_quality_score": {"type": "number"},
+    "g_b_thresholds_met": {"type": "boolean"},
+    "owner_g_b_approval_required": {"const": true},
+    "thresholds_not_evaluated": {"type": "array", "items": {"type": "string"}},
+    "baseline_comparison": {"type": "object"},
+    "input_hashes": {"type": "object", "additionalProperties": {"type": "string"}},
+    "source_versions": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"measurement_status": {"const": "not_scored"}}}, "then": {"properties": {"video_quality_score": {"const": null}, "g_b_thresholds_met": {"const": false}}}},
+    {"if": {"properties": {"measurement_status": {"const": "incomplete"}}}, "then": {"properties": {"video_quality_score": {"const": null}}}}
+  ],
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "required": ["framework_stage_id", "rubric_items", "stage_output_quality_score", "measurement_status"],
+      "properties": {
+        "framework_stage_id": {"type": "string", "minLength": 1},
+        "rubric_items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+        "stage_output_quality_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "measurement_status": {"enum": ["measured", "not_scored", "incomplete"]},
+        "approval_status": {"enum": ["provisional", "awaiting_user", "approved", "blocked", "stale"]}
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["rubric_id", "earned_points", "max_points", "evidence_paths", "reason"],
+      "properties": {
+        "rubric_id": {"type": "string", "minLength": 1},
+        "earned_points": {"type": "number", "minimum": 0},
+        "max_points": {"type": "number", "exclusiveMinimum": 0},
+        "evidence_paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

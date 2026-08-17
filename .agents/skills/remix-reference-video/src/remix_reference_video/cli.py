@@ -34,6 +34,7 @@ from .gb_frozen_case import (
     write_pair_measurement,
 )
 from .measurement import MeasurementError
+from .snapshot_store import SnapshotStore
 from .production_runtime import ProductionRuntimeConfig, build_real_registry
 from .runner import FastPathRunner, ProductionRunner
 from .storage import StorageError, read_json_object, read_jsonl_records
@@ -151,6 +152,11 @@ def _parser() -> argparse.ArgumentParser:
         help="resume the declared isolated pair without recreating task roots",
     )
     pair.add_argument("--json", action="store_true")
+    snapshots = commands.add_parser("gb-build-snapshots", help="build read-only G-B measurement snapshots")
+    snapshots.add_argument("--task-dir", type=Path, required=True)
+    snapshots.add_argument("--rubric-input", type=Path, required=True)
+    snapshots.add_argument("--baseline-policy", type=Path, required=True)
+    snapshots.add_argument("--json", action="store_true")
     return parser
 
 
@@ -917,6 +923,10 @@ def main(argv: list[str] | None = None) -> int:
             payload = run_gb_pair(args)
             _emit(payload, json_output=json_output, command="gb-pair")
             return EXIT_OK if payload["status"] == "measured_pending_review" else EXIT_AWAITING_USER
+        if args.command == "gb-build-snapshots":
+            payload = SnapshotStore(args.task_dir).build(rubric_path=args.rubric_input, policy_path=args.baseline_policy)
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
         raise ValueError(f"unsupported command: {args.command}")
     except AssetIndexPrerequisiteError as error:
         _emit_error(str(error), json_output=json_output, status="failed")

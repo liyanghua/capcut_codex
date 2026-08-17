@@ -44,6 +44,34 @@ _SHELL_EXECUTABLES = frozenset(
     }
 )
 
+_CACHE_FACT_FIELDS = frozenset({
+    "cache_source", "lookup_hit_count", "lookup_miss_count", "reused_record_count",
+    "skipped", "evidence_paths", "failure_category",
+})
+
+
+def _metric_cache_facts(execution: Mapping[str, object] | None, *, cache_status: str) -> dict[str, object]:
+    """Copy only declared adapter facts into the authoritative metric row."""
+    facts: dict[str, object] = {"cache_status": cache_status}
+    if not isinstance(execution, Mapping):
+        return facts
+    for field in _CACHE_FACT_FIELDS:
+        value = execution.get(field)
+        if value is not None:
+            facts[field] = value
+    if "cache_source" not in facts:
+        facts["cache_source"] = "hot_lookup" if cache_status == "hit" else "none"
+    return facts
+
+
+def _failure_category(error: BaseException) -> str:
+    text = str(error).lower()
+    if any(token in text for token in ("network", "timeout", "http", "api")):
+        return "network_api"
+    if isinstance(error, (StorageError, ValueError)):
+        return "validation"
+    return "execution"
+
 
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -1296,7 +1324,7 @@ class ProductionRunner:
                     }
                 )
                 store.append_event(
-                    {"event_type": "command.failed", "execution_stage_id": node.node_id},
+                    {"event_type": "command.failed", "execution_stage_id": node.node_id, "attempt_id": attempt.attempt_id, "failure_category": _failure_category(error)},
                     state_revision=self._revision(failed),
                 )
                 store.append_metric(
@@ -1305,7 +1333,8 @@ class ProductionRunner:
                         "attempt_id": attempt.attempt_id,
                         "status": "failed",
                         "wall_seconds": elapsed,
-                        "cache_status": "miss",
+                        **_metric_cache_facts(None, cache_status="miss"),
+                        "failure_category": _failure_category(error),
                     }
                 )
                 raise
@@ -1348,8 +1377,9 @@ class ProductionRunner:
                     "attempt_id": attempt.attempt_id,
                     "status": "succeeded",
                     "wall_seconds": time.perf_counter() - started_at,
-                    "cache_status": (
-                        "hit" if execution.get("status") == "cache_hit" else "miss"
+                    **_metric_cache_facts(
+                        execution,
+                        cache_status="hit" if execution.get("status") == "cache_hit" else "miss",
                     ),
                 }
             )

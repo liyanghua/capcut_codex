@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:x-input-contract:phase6-rubric-input",
+  "type": "object",
+  "required": ["framework_stages"],
+  "properties": {"framework_stages": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"type": "object", "required": ["framework_stage_id", "measurement_status", "rubric_items"], "properties": {"framework_stage_id": {"type": "string"}, "measurement_status": {"enum": ["measured", "not_scored"]}, "rubric_items": {"type": "array"}, "reason": {"type": "string"}}}}}
+}

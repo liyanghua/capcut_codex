@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:capcut:remix-reference-video:schema:v2-alpha-envelope",
   "title": "Reference Video Remix V2 Alpha Artifact Envelope",
-  "description": "Track A validates the common metadata envelope and registry only. Full artifact shapes are deferred to Track B.",
+  "description": "Track A validates the common metadata envelope and registry; Track B adds full measurement artifact shapes.",
   "registry_version": "1.0.0",
   "x-skill": {
     "name": "remix-reference-video",
@@ -18,7 +18,7 @@
     "v2_alpha": {
       "contract_version": "2.0.0-alpha.1",
       "default_artifact_schema_version": "1.0.0",
-      "full_shape_validator": "deferred_to_track_b"
+      "full_shape_validator": "snapshot_schema_validator"
     }
   },
   "type": "object",
@@ -59,7 +59,9 @@
         "material_validation_report",
         "final_validation_report",
         "render_report",
-        "jianying_import_manifest"
+        "jianying_import_manifest",
+        "phase6_score_snapshot",
+        "process_assessment"
       ]
     },
     "schema_id": {
@@ -97,7 +99,9 @@
     {"properties":{"artifact_type":{"const":"material_validation_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:material-validation-report"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"final_validation_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:final-validation-report"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"render_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:render-report"}},"required":["artifact_type","schema_id"]},
-    {"properties":{"artifact_type":{"const":"jianying_import_manifest"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest"}},"required":["artifact_type","schema_id"]}
+    {"properties":{"artifact_type":{"const":"jianying_import_manifest"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"phase6_score_snapshot"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:phase6-score-snapshot"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"process_assessment"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:process-assessment"}},"required":["artifact_type","schema_id"]}
   ],
   "additionalProperties": true,
   "x-artifacts": [
@@ -126,7 +130,9 @@
     {"artifact_type":"material_validation_report","schema_id":"urn:capcut:remix-reference-video:artifact:material-validation-report","path":"material_validation_report.json","format":"json","status":"active","track":"A"},
     {"artifact_type":"final_validation_report","schema_id":"urn:capcut:remix-reference-video:artifact:final-validation-report","path":"final_validation_report.json","format":"json","status":"active","track":"A"},
     {"artifact_type":"render_report","schema_id":"urn:capcut:remix-reference-video:artifact:render-report","path":"render_report.json","format":"json","status":"active","track":"A"},
-    {"artifact_type":"jianying_import_manifest","schema_id":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest","path":"jianying_import_manifest.json","format":"json","status":"active","track":"A"}
+    {"artifact_type":"jianying_import_manifest","schema_id":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest","path":"jianying_import_manifest.json","format":"json","status":"active","track":"A"},
+    {"artifact_type":"phase6_score_snapshot","schema_id":"urn:capcut:remix-reference-video:artifact:phase6-score-snapshot","path":"measurements/<snapshot_id>/phase6_score_snapshot.json","format":"json","status":"active","track":"B","schema_path":"schemas/phase6-score-snapshot.schema.json","activation":"after_g_a"},
+    {"artifact_type":"process_assessment","schema_id":"urn:capcut:remix-reference-video:artifact:process-assessment","path":"measurements/<snapshot_id>/process_assessment.json","format":"json","status":"active","track":"B","schema_path":"schemas/process-assessment.schema.json","activation":"after_g_a"}
   ],
   "x-planned-artifacts": [
     {"artifact_type":"quality_scorecard","status":"planned_track_c","activation":"after_g_b"}
@@ -139,6 +145,10 @@
     "authority": "handoff_only",
     "approval_authority": "pipeline_state.json"
   },
+  "x-input-contracts": [
+    {"artifact_type":"phase6_rubric_input","schema_id":"urn:capcut:remix-reference-video:x-input-contract:phase6-rubric-input","schema_path":"schemas/inputs/phase6-rubric-input.schema.json","path":"measurement_inputs/phase6-rubric-input.json","format":"json"},
+    {"artifact_type":"gb_baseline_policy","schema_id":"urn:capcut:remix-reference-video:x-input-contract:gb-baseline-policy","schema_path":"schemas/inputs/gb-baseline-policy.schema.json","path":"measurement_inputs/gb-baseline-policy.json","format":"json"}
+  ],
   "x-non-task-resources": {
     "manifest": {"path":"manifest.json","format":"json","version_field":"manifest_schema_version"},
     "trigger_fixture": {"path":"trigger_smoke_cases.json","format":"json","version_field":"fixture_schema_version"}

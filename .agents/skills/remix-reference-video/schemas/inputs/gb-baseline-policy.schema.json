@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:x-input-contract:gb-baseline-policy",
+  "type": "object",
+  "required": ["policy_id", "policy_version", "require_v1_comparability", "allowed_not_evaluated_metrics", "frozen_input_sha256"],
+  "properties": {
+    "policy_id": {"type": "string", "minLength": 1},
+    "policy_version": {"type": "string", "minLength": 1},
+    "require_v1_comparability": {"type": "boolean"},
+    "allowed_not_evaluated_metrics": {"type": "array", "items": {"type": "string"}},
+    "frozen_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "cold_limit_seconds": {"type": "number", "minimum": 0},
+    "hot_limit_seconds": {"type": "number", "minimum": 0},
+    "minimum_video_quality_score": {"type": "number"},
+    "target_video_quality_score": {"type": "number"}
+  }
+}

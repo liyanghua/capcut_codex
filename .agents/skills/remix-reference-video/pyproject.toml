@@ -7,7 +7,7 @@ name = "remix-reference-video"
 version = "0.1.0"
 description = "Gate-aware Fast Path contracts for reference video remix tasks"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["jsonschema>=4.23,<5"]
 
 [project.optional-dependencies]
 api = ["fastapi>=0.128,<1", "uvicorn>=0.40,<1"]

@@ -92,6 +92,7 @@ class ApprovalServiceTests(unittest.TestCase):
         result = self.approve()
 
         self.assertEqual(result["decision"], "approved")
+        self.assertEqual(result["run_id"], "run-1")
         self.assertEqual(self.store.read_state()["gate_status"]["gate1"], "approved")
         approved_at = datetime.fromisoformat(str(result["approved_at"]).replace("Z", "+00:00"))
         self.assertEqual(approved_at.tzinfo, UTC)
