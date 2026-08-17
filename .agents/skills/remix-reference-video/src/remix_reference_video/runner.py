@@ -1412,6 +1412,8 @@ class ProductionRunner:
         if not isinstance(gates, Mapping):
             raise StorageError("gate_status must be an object")
         for gate_id, status in gates.items():
+            if gate_id in {"gate3", "gate4"}:
+                continue
             if status in {"awaiting_user", "blocked", "stale", "rejected"}:
                 if gate_id == "gate5" and status == "awaiting_user":
                     # RenderAdapter may mark Gate 5 awaiting before the DAG's

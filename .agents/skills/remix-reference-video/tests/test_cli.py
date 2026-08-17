@@ -522,6 +522,16 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(_pending_pair_gate(self.task, state), "gate5")
 
+    def test_gb_pair_ignores_aggregate_gate_wait_states(self) -> None:
+        state = {
+            "gate_status": {
+                "gate3": "awaiting_user",
+                "gate4": "awaiting_user",
+            }
+        }
+
+        self.assertIsNone(_pending_pair_gate(self.task, state))
+
     def test_gb_pair_side_is_complete_at_approved_gate5(self) -> None:
         self.assertTrue(
             _pair_side_complete({"gate_status": {"gate5": "approved"}})

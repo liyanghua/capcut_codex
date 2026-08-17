@@ -532,6 +532,8 @@ def _pending_pair_gate(task_dir: Path, state: Mapping[str, object]) -> str | Non
     for gate_id, status in gates.items():
         if status != "awaiting_user":
             continue
+        if gate_id in {"gate3", "gate4"}:
+            continue
         if gate_id == "gate5" and not (
             task_dir / "gate_review_packages" / "gate5.json"
         ).is_file():

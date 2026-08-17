@@ -718,6 +718,17 @@ class ProductionRunnerTests(unittest.TestCase):
         self.reference = self.task / "reference.mp4"
         self.reference.write_bytes(b"fixture")
 
+    def test_pending_gate_ignores_aggregate_gate_wait_states(self) -> None:
+        runner = ProductionRunner(self.task, ())
+        state = {
+            "gate_status": {
+                "gate3": "awaiting_user",
+                "gate4": "awaiting_user",
+            }
+        }
+
+        self.assertIsNone(runner._pending_gate(state))
+
     def test_reference_split_stops_at_gate1_and_resume_is_write_free(self) -> None:
         calls: list[str] = []
         task = self.task
