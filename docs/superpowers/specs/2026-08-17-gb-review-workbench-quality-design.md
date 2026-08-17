@@ -38,7 +38,7 @@
 - 页面内通过、驳回、要求修改；
 - 修改 dry-run、影响预览、二次确认和 stale 传播；
 - cold/hot 审批、缓存、机器时间、审核时间和返工统计；
-- Track C 五阶段生产质量快照；
+- Track-B `phase6_score_snapshot.json` 五阶段生产质量投影；Track C `quality_scorecard.json` 在 G-B 通过后才启用；
 - L0 硬门禁、L1 六维离线内容质量和 P 过程评价；
 - G-B owner 复核包和明确决定；
 - 静态 HTML/Markdown + CLI 故障降级路径。
@@ -77,14 +77,14 @@ G-B 复核前必须具备：
 - hot `machine_api_critical_path_seconds <= 480`；
 - 五阶段生产质量分均不低于 88；
 - `video_quality_score >= 88`，91 为目标值；
-- cold/hot Gate 1-5 全部独立批准；
+- canonical 七个 Gate 全部独立批准：`gate1`、`gate2`、`gate3_material_selection`、`gate3_evidence_closure`、`gate4_pre_generation`、`gate4_post_generation`、`gate5`；`gate3`/`gate4` 仅由子状态派生；
 - 无审批复用、范围越界、未登记生产输入和越权归档；
-- 新监督 cold/hot 的七个 Gate 决定全部来自工作台；
+- 新监督 cold/hot 的七个 canonical Gate 决定全部来自工作台；CLI 只用于工作台故障演练，该 run 不计入 G-B qualification；
 - Gate 3 选材 `decision_seconds <= 300`；
 - Gate 4 生成前 `decision_seconds <= 180`；
 - 修订轮 `decision_seconds <= 120`；
 - 其他 Gate 首轮记录实测，单次轻微超时不自动阻断；
-- owner 明确记录 `approved` 或 `rejected`。
+- owner 明确记录 `approved` 或 `rejected`，并绑定 policy、package hash、snapshot hash、actor 和可信服务时间。
 
 ## 4. 质量模型
 
@@ -98,9 +98,12 @@ G-B 复核前必须具备：
 
 L2 依赖真实投放后的观看、转化、退款和贡献利润。首版只保留 `evaluation_context_id`、`video_version_id` 和反馈入口，不预测、不伪造 L2，也不把 L2 接入作为本轮 G-B 阻塞项。
 
+L0 必需输入包括落地页快照、结构化人群定义、素材授权和声明事实。任一缺失固定为 L0 `fail`，不得用 `not_scored` 跳过；`not_scored` 只适用于 L1 或 Track-B rubric 的观察证据不足。
+
 ### 4.2 Track C 与 L1 不混用
 
-- `quality_scorecard.json` 是 Track C 五阶段生产质量权威；
+- `phase6_score_snapshot.json` 是 G-B 阶段的最小 Track-B 五阶段质量投影；
+- `quality_scorecard.json` 是 G-B 通过后才启用的 Track-C 五阶段质量权威，不属于本轮 G-B 批准产物；
 - `content_quality_profile.json` 是 L1 六维内容质量权威；
 - `process_assessment.json` 是 P 过程评价权威；
 - 候选匹配置信度、技术校验结果或线上指标不得替代上述任一分数；
@@ -123,7 +126,7 @@ L2 依赖真实投放后的观看、转化、退款和贡献利润。首版只�
 
 ### 4.4 评分产物
 
-`quality_scorecard.json` 每个阶段至少记录：
+Track-B `phase6_score_snapshot.json` 每个阶段至少记录：
 
 - `framework_stage_id`；
 - `rubric_items[].earned_points`；
@@ -133,7 +136,7 @@ L2 依赖真实投放后的观看、转化、退款和贡献利润。首版只�
 - `stage_output_quality_score`；
 - `measurement_status` 与 `approval_status`。
 
-只有全部 rubric 项有当前证据时才计算阶段分。缺项写 `not_scored`，不得填目标分。
+只有全部 rubric 项有当前证据时才计算阶段分。缺项写 `not_scored`，不得填目标分。G-B 前不生成或宣称 Track-C `quality_scorecard.json` 已激活。
 
 `content_quality_profile.json` 每个 L1 维度至少记录：
 
@@ -163,7 +166,7 @@ L2 依赖真实投放后的观看、转化、退款和贡献利润。首版只�
 
 职责：在 `127.0.0.1` 提供任务快照、媒体、决策和变更入口。
 
-输入：任务根目录和启动时指定的 `actor`。
+输入：任务根目录和启动时指定的本机 `actor`；请求体中的 actor 只作为显示字段，服务端必须覆盖为启动身份。
 
 输出：JSON/SSE、Range 媒体流和结构化命令结果。
 
@@ -173,7 +176,7 @@ L2 依赖真实投放后的观看、转化、退款和贡献利润。首版只�
 
 职责：提交通过或驳回。
 
-必需输入：`run_id`、`gate_id`、`review_package_hash`、`state_revision`、`actor`、`decision`、幂等键和可选备注。
+必需输入：`run_id`、canonical `gate_id`、`review_package_hash`、`state_revision`、`scope_type`、`scope_ids`、`strategy`、`decision`、幂等键和可选备注。UI `request_changes` 映射为 B0 的 `changes_requested`；UI `approve/reject` 映射为 `approved/rejected`。
 
 行为：服务端重新读取当前审核包、重算哈希、验证 predecessor 和 revision，再调用现有 B0 Approval Service。
 
@@ -230,7 +233,7 @@ L2 依赖真实投放后的观看、转化、退款和贡献利润。首版只�
 
 输出：阈值逐项结果、阻塞项、未测量项、建议和 owner 决定契约。
 
-边界：只能生成待审包，不能写 owner 批准。
+边界：只能生成待审包，不能写 owner 批准；owner 决定由独立的 `GBOwnerDecisionService` 记录。
 
 ## 6. 审核工作台交互
 
@@ -287,6 +290,20 @@ AI 可以提出候选建议，但建议必须标记来源，且不能自行执�
 - 改文案、音色或语速：Gate 4 生成前及下游；新增声明返回 Gate 2；
 - Gate 5 问题：按根因返回最早可修复 Gate。
 
+变更到产物和状态的最小映射：
+
+| change_type | 主要产物 | stale 状态 | Runner action |
+| --- | --- | --- | --- |
+| `copy` | `production_script_candidate`、`voice_preflight` | `gate4_pre_generation`、`gate4_post_generation`、`gate5` | 重新编译脚本并预检 |
+| `claim_scope` | `content_baseline`、`mutation_plan` | Gate 2 及全部下游 | 返回 Gate 2 重新批准 |
+| `voice` | `approved_production_script`、`voice/*`、timeline、SRT | Gate 4 生成前及下游 | 重新预检并 TTS |
+| `material`/`range` | `fragment_plan`、material manifest、evidence matrix | 受影响 Gate 3 子状态及下游 | 重新物化、证据闭环 |
+| `rerecord` | 指定 voice segment、duration report、timeline、SRT | Gate 4 生成后、Gate 5 | 指定句 TTS、重建时间轴 |
+| `boundary` | proxy boundary、render reports、final validation | Gate 5 | 重新代理/渲染校验 |
+| `structural` | `content_baseline`、`mutation_plan` | Gate 2 及全部下游 | 只生成 Gate 2 change request |
+
+Gate 3 `request_omit`、`request_merge`、`request_restructure` 只记录请求，不直接执行结构变化。所有 aggregate Gate 状态由两个子状态重新计算。
+
 ## 8. 测量口径修复
 
 ### 8.1 审批
@@ -295,7 +312,7 @@ AI 可以提出候选建议，但建议必须标记来源，且不能自行执�
 
 ### 8.2 缓存
 
-缓存至少拆成：
+缓存至少按每个 execution stage 拆成：
 
 - `snapshot_seeded`：是否复制经声明的 cold 快照；
 - `lookup_hits` / `lookup_misses`：索引查询结果；
@@ -303,11 +320,13 @@ AI 可以提出候选建议，但建议必须标记来源，且不能自行执�
 - `stage_execution_skipped`：是否因完整缓存跳过阶段；
 - `index_reuse_seconds_saved`：相对冻结基线的索引耗时差。
 
+每个 stage 记录 `cache_source`、`lookup_hit_count`、`lookup_miss_count`、`reused_record_count`、`skipped`、`started_at`、`ended_at` 和 `evidence_paths`。汇总字段只能由这些 stage facts 计算。
+
 不得用 `snapshot_seeded=true` 推断所有阶段 cache hit，也不得把阶段执行成功统一写成 miss。
 
 ### 8.3 时间
 
-分别记录：
+分别记录并按 session、Gate、stage 聚合：
 
 - `machine_api_critical_path_seconds`；
 - `human_wait_seconds`；
@@ -317,9 +336,104 @@ AI 可以提出候选建议，但建议必须标记来源，且不能自行执�
 - `retry_network_seconds`；
 - `gate_return_count`。
 
-缺失时状态为 `not_measured` 并写原因。零只表示确实观测到零。
+`decision_seconds = decision_accepted_at - evidence_first_interaction_at`；`operator_touch_seconds` 是证据交互到决定提交之间的 active interaction 区间总和；`human_wait_seconds` 是审核包生成到首次证据交互的等待；`rework_seconds` 是结构化变更接受到下游重新达到当前 Gate 的机器与人工周期，不包含原始审核时间。页面失去连接、关闭或无心跳超过 60 秒时结束 session 并写 `paused`，恢复后创建新 session；未闭合事件写 `incomplete/not_measured`，不得估算。重试和 Gate 返回按事件时间和 run_id 去重。
 
-## 9. API 契约
+## 9. 产物与 API 契约
+
+### 9.1 共同快照 envelope
+
+以下产物均为 V2 immutable snapshot，必须包含共同字段：
+
+```json
+{
+  "artifact_type": "...",
+  "schema_id": "urn:capcut:remix-reference-video:artifact:...",
+  "schema_version": "1.0.0",
+  "contract_version": "2.0.0-alpha.1",
+  "skill_version": "2.0.0-alpha.1",
+  "snapshot_id": "uuid",
+  "run_id": "...",
+  "state_revision": 63,
+  "input_hashes": {},
+  "policy_id": "...",
+  "policy_version": "...",
+  "source_versions": {},
+  "event_time": "trusted-service-time",
+  "processed_at": "trusted-service-time",
+  "idempotency_key": "...",
+  "status": "measured|provisional|passed|blocked|rejected|incomplete|not_scored",
+  "supersedes_snapshot_id": null
+}
+```
+
+`phase6_score_snapshot`、`content_quality_profile`、`process_assessment`、`gate_review_view`、`g_b_owner_review_package` 和 `g_b_owner_decision` 必须登记到 canonical registry；历史快照不可覆盖，修订通过新 `snapshot_id` 和 `supersedes_snapshot_id` 产生。任一单元失败可以生成 `incomplete` 快照，但不得伪造其他单元的结果。
+
+`g_b_frozen_input_snapshot.json` 是 G-B 输入根的必需产物，至少绑定唯一 `reference-*.mp4`、`project_brief.json`、`asset_profiles.json`、源素材清单、代码/runtime/TTS/FFmpeg 版本和各自 SHA-256。owner review package 必须包含该 snapshot 的 SHA-256，并绑定 cold/hot 的 `run_id` 与 task root。
+
+### 9.2 质量与过程快照字段
+
+`phase6_score_snapshot.json` 仅用于 G-B：包含五阶段分、总分、机器关键路径、可测人工/返工/返回指标、cache stage facts、baseline comparison result、`g_b_thresholds_met` 和 `owner_g_b_approval_required=true`。当 V1 comparability 不可用时，`rework_seconds`/`gate_return_count` 的 comparison 状态为 `not_evaluated`，不填零、不伪造 V1；`v2_forward_baseline_v1` 只比较已批准 V2 基线，首次运行记录 `baseline_status=establishing`。
+
+`process_assessment.json` 另外记录 `first_pass_rate`、`defect_escape_rate`、`operator_touch_seconds`、`human_wait_seconds`、`rework_seconds`、`gate_return_count`、`cost_status`、`cost_inputs` 和各指标的 `measurement_status`。缺少来源写 `not_measured` 及原因。
+
+`content_quality_profile.json` 的 L1 `calibration_status=provisional` 只允许当前视频改版和人工复核，不允许跨视频排序、正式合格线或 G-B 通过结论。
+
+### 9.3 决策请求
+
+```json
+{
+  "decision": "approved|rejected|changes_requested",
+  "scope_type": "script_settings|output_bundle|material_selection|content_baseline|evidence_closure",
+  "scope_ids": ["..."],
+  "strategy": {},
+  "note": "...",
+  "review_package_hash": "sha256",
+  "state_revision": 63,
+  "idempotency_key": "uuid"
+}
+```
+
+服务端从启动配置绑定 actor，不接受浏览器伪造 actor。相同幂等键和相同 payload 返回原决定；相同幂等键但 payload 不同返回 `409 idempotency_conflict`。UI 的 `request_changes` 只在展示层使用，写入时统一为 `changes_requested`。
+
+### 9.4 Change request
+
+```json
+{
+  "change_type": "copy|claim_scope|voice|material|range|rerecord|boundary|structural",
+  "scope_ids": ["fragment04", "line02"],
+  "payload": {},
+  "reason": "业务原因",
+  "preview_hash": "sha256",
+  "review_package_hash": "sha256",
+  "state_revision": 63,
+  "idempotency_key": "uuid"
+}
+```
+
+允许字段白名单：
+
+- `copy`：Gate 4 candidate lines；声明新增或意图变化升级为 `structural` 返回 Gate 2；
+- `claim_scope`：Gate 2 已批准 claim IDs 的子集；
+- `voice`：批准的 provider/speaker/speed 范围；
+- `material`：Gate 3 候选 ID、SHA 和 overlay decision；
+- `range`：Gate 3 已批准 broad range 内的起止；
+- `rerecord`：Gate 4 已批准文本的 fragment/line ID；
+- `boundary`：Gate 5 boundary ID 和问题类型；
+- `structural`：只能生成 Gate 2 change request，不直接执行。
+
+每种 change type 都有固定 artifact、stale Gate、Runner action 和是否需要 TTS/render 的映射；预览 hash 过期、revision 变化、字段越权或 payload 无法验证时返回冲突，不执行。
+
+### 9.5 Owner G-B decision
+
+`g_b_owner_decision.json` 是独立 immutable artifact，字段至少包含：`decision=approved|rejected`、`package_sha256`、`policy_id/version`、`input_snapshot_sha256`、`measurement_snapshot_ids`、`actor`、`trusted_service_time`、`state_revision`、`idempotency_key`、`rejection_reasons` 和 `status`。写入入口为 `g-b-owner-approve`/`g-b-owner-reject` CLI 或对应本机 API；actor 必须与 owner 启动身份匹配，不能由页面 body 覆盖。只有 package status 为 `ready_for_owner` 且所有硬门禁满足时才允许 approved；rejected 必须保留原因和恢复动作。
+
+owner review package 状态为 `building -> ready_for_owner -> approved|rejected|stale`。package 任何输入 hash、policy version、run_id 或 measurement snapshot 变化都使其 stale；stale package 不可提交决定。owner approved 只推进 G-B evidence state，不直接修改普通 V2 production lock；解锁仍需后续发布事务。
+
+### 9.6 API path and media boundary
+
+现有 `/tasks/{task_id}` 是内部任务投影；新 `/runs/{run_id}` 先通过权威 `run_id -> task_dir` registry 解析，再复用同一 allowlist。允许的 artifact ID 只包括当前 Gate 登记的 review sheet、approved evidence、jpg/png/mp4/mp3/srt/report 文件；禁止目录遍历、符号链接逃逸和任意路径。Range 不满足时返回 `416`，artifact 不在 allowlist 返回 `404`，revision/hash 冲突返回 `409`，SSE 断线后使用 `Last-Event-ID` 重拉快照，不在客户端重放状态机。
+
+## 10. API 契约
 
 首版本机端点：
 
@@ -332,6 +446,7 @@ AI 可以提出候选建议，但建议必须标记来源，且不能自行执�
 - `POST /api/v1/runs/{run_id}/gates/{gate_id}/decisions`；
 - `POST /api/v1/runs/{run_id}/gates/{gate_id}/changes/preview`；
 - `POST /api/v1/runs/{run_id}/gates/{gate_id}/changes`。
+- `POST /api/v1/g-b/reviews/{package_sha256}/owner-decision`。
 
 写请求必须带 review identity、actor 和幂等键。API 仅绑定 `127.0.0.1`，路径使用 allowlist 和 containment 校验，不提供目录浏览或任意文件读取。
 
@@ -342,8 +457,8 @@ AI 可以提出候选建议，但建议必须标记来源，且不能自行执�
 - 修改校验失败：丢弃 staging，保留当前批准产物和状态；
 - TTS/渲染失败：保留有效上游，记录可重试恢复命令；
 - 媒体缺失或路径逃逸：阻塞当前操作并登记安全错误；
-- 工作台/API 不可用：使用当前哈希绑定的静态快照和 CLI；
-- 质量证据缺失：标记 `not_scored` 或 L0 fail，不推断通过；
+- 工作台/API 不可用：允许静态快照 + CLI 完成故障恢复演练，但该 run 明确标记 `workbench_qualification=excluded`，不计入 G-B；
+- 缺少 L0 必需输入（落地页快照、结构化人群定义、素材授权、声明事实）：对应 L0 检查固定为 `fail`，必须返回最早受影响 Gate；缺少 L1 或 Track-B rubric 观察证据才可标记 `not_scored`，两者不可互换；
 - owner 复核包存在阻塞项：不显示可提交的 G-B approved 决定。
 
 ## 11. 验收
