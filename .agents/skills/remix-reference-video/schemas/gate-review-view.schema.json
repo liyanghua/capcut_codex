@@ -1,0 +1,22 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"urn:capcut:remix-reference-video:artifact:gate-review-view",
+  "type":"object",
+  "required":["artifact_type","schema_id","schema_version","contract_version","skill_version","snapshot_id","run_id","gate_id","state_revision","bound_package_sha256","lifecycle_status","review_meta","business_summary","available_actions","evidence","risks","impact_context"],
+  "properties":{
+    "artifact_type":{"const":"gate_review_view"},
+    "schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-view"},
+    "schema_version":{"const":"1.0.0"},"contract_version":{"const":"2.0.0-alpha.1"},"skill_version":{"const":"2.0.0-alpha.1"},
+    "snapshot_id":{"type":"string","minLength":1},"run_id":{"type":"string","minLength":1},
+    "gate_id":{"enum":["gate1","gate2","gate3_material_selection","gate3_evidence_closure","gate4_pre_generation","gate4_post_generation","gate5"]},
+    "state_revision":{"type":"integer","minimum":0},"bound_package_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "lifecycle_status":{"enum":["ready","stale","incomplete"]},
+    "review_meta":{"type":"object","required":["business_name","decision_question","expected_minutes"],"properties":{"business_name":{"type":"string","minLength":1},"decision_question":{"type":"string","minLength":1},"expected_minutes":{"type":"integer","minimum":1}}},
+    "business_summary":{"type":"object","required":["current_step","business_impacts","recommendation"],"properties":{"current_step":{"type":"string"},"business_impacts":{"type":"array","maxItems":3,"items":{"type":"string"}},"recommendation":{"type":"object","required":["action","reason"]}}},
+    "available_actions":{"type":"array","minItems":3,"items":{"enum":["approve","reject","request_changes"]},"uniqueItems":true},
+    "evidence":{"type":"array","items":{"type":"object","required":["evidence_id","kind","status"]}},
+    "risks":{"type":"array","items":{"type":"object","required":["severity","message","blocking"]}},
+    "impact_context":{"type":"object","required":["change_form_schema","last_approval_diff"]},
+    "technical_appendix":{"type":"object"},"input_hashes":{"type":"object"},"supersedes_snapshot_id":{"type":["string","null"]}
+  }
+}

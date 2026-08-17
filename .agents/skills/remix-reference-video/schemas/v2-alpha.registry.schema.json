@@ -61,7 +61,9 @@
         "render_report",
         "jianying_import_manifest",
         "phase6_score_snapshot",
-        "process_assessment"
+        "process_assessment",
+        "gate_review_view",
+        "gate_review_sheet"
       ]
     },
     "schema_id": {
@@ -101,7 +103,9 @@
     {"properties":{"artifact_type":{"const":"render_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:render-report"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"jianying_import_manifest"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"phase6_score_snapshot"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:phase6-score-snapshot"}},"required":["artifact_type","schema_id"]},
-    {"properties":{"artifact_type":{"const":"process_assessment"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:process-assessment"}},"required":["artifact_type","schema_id"]}
+    {"properties":{"artifact_type":{"const":"process_assessment"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:process-assessment"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"gate_review_view"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-view"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"gate_review_sheet"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-sheet"}},"required":["artifact_type","schema_id"]}
   ],
   "additionalProperties": true,
   "x-artifacts": [
@@ -132,7 +136,9 @@
     {"artifact_type":"render_report","schema_id":"urn:capcut:remix-reference-video:artifact:render-report","path":"render_report.json","format":"json","status":"active","track":"A"},
     {"artifact_type":"jianying_import_manifest","schema_id":"urn:capcut:remix-reference-video:artifact:jianying-import-manifest","path":"jianying_import_manifest.json","format":"json","status":"active","track":"A"},
     {"artifact_type":"phase6_score_snapshot","schema_id":"urn:capcut:remix-reference-video:artifact:phase6-score-snapshot","path":"measurements/<snapshot_id>/phase6_score_snapshot.json","format":"json","status":"active","track":"B","schema_path":"schemas/phase6-score-snapshot.schema.json","activation":"after_g_a"},
-    {"artifact_type":"process_assessment","schema_id":"urn:capcut:remix-reference-video:artifact:process-assessment","path":"measurements/<snapshot_id>/process_assessment.json","format":"json","status":"active","track":"B","schema_path":"schemas/process-assessment.schema.json","activation":"after_g_a"}
+    {"artifact_type":"process_assessment","schema_id":"urn:capcut:remix-reference-video:artifact:process-assessment","path":"measurements/<snapshot_id>/process_assessment.json","format":"json","status":"active","track":"B","schema_path":"schemas/process-assessment.schema.json","activation":"after_g_a"},
+    {"artifact_type":"gate_review_view","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-view","path":"gate_review_packages/<gate_id>.review/gate_review_view.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-view.schema.json","activation":"after_g_a"},
+    {"artifact_type":"gate_review_sheet","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-sheet","path":"gate_review_packages/<gate_id>.review/gate_review_sheet.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-sheet.schema.json","activation":"after_g_a"}
   ],
   "x-planned-artifacts": [
     {"artifact_type":"quality_scorecard","status":"planned_track_c","activation":"after_g_b"}
@@ -147,7 +153,15 @@
   },
   "x-input-contracts": [
     {"artifact_type":"phase6_rubric_input","schema_id":"urn:capcut:remix-reference-video:x-input-contract:phase6-rubric-input","schema_path":"schemas/inputs/phase6-rubric-input.schema.json","path":"measurement_inputs/phase6-rubric-input.json","format":"json"},
-    {"artifact_type":"gb_baseline_policy","schema_id":"urn:capcut:remix-reference-video:x-input-contract:gb-baseline-policy","schema_path":"schemas/inputs/gb-baseline-policy.schema.json","path":"measurement_inputs/gb-baseline-policy.json","format":"json"}
+    {"artifact_type":"gb_baseline_policy","schema_id":"urn:capcut:remix-reference-video:x-input-contract:gb-baseline-policy","schema_path":"schemas/inputs/gb-baseline-policy.schema.json","path":"measurement_inputs/gb-baseline-policy.json","format":"json"},
+    {"artifact_type":"change_request_copy","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-copy","schema_path":"schemas/changes/copy.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_claim_scope","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-claim-scope","schema_path":"schemas/changes/claim-scope.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_voice","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-voice","schema_path":"schemas/changes/voice.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_material","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-material","schema_path":"schemas/changes/material.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_range","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-range","schema_path":"schemas/changes/range.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_rerecord","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-rerecord","schema_path":"schemas/changes/rerecord.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_boundary","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-boundary","schema_path":"schemas/changes/boundary.schema.json","path":"change_requests/<request_id>.json","format":"json"},
+    {"artifact_type":"change_request_structural","schema_id":"urn:capcut:remix-reference-video:x-input-contract:change-request-structural","schema_path":"schemas/changes/structural.schema.json","path":"change_requests/<request_id>.json","format":"json"}
   ],
   "x-non-task-resources": {
     "manifest": {"path":"manifest.json","format":"json","version_field":"manifest_schema_version"},
