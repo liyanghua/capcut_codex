@@ -34,11 +34,17 @@ from .gb_frozen_case import (
     write_pair_measurement,
 )
 from .measurement import MeasurementError
+from .api import serve_workbench
+from .change_service import WorkbenchOrchestrator
+from .run_registry import RunRegistry
+from .review_session import ReviewSessionService
 from .snapshot_store import SnapshotStore
+from .review_view import ReviewViewBuilder, ReviewViewError
 from .production_runtime import ProductionRuntimeConfig, build_real_registry
 from .runner import FastPathRunner, ProductionRunner
 from .storage import StorageError, read_json_object, read_jsonl_records
 from .storage import TaskStorage
+from .workbench_decision import WorkbenchDecisionService
 
 
 EXIT_OK = 0
@@ -157,6 +163,48 @@ def _parser() -> argparse.ArgumentParser:
     snapshots.add_argument("--rubric-input", type=Path, required=True)
     snapshots.add_argument("--baseline-policy", type=Path, required=True)
     snapshots.add_argument("--json", action="store_true")
+    review = commands.add_parser("workbench-build-review", help="build a deterministic Gate review snapshot")
+    review.add_argument("--task-dir", type=Path, required=True)
+    review.add_argument("--gate", required=True)
+    review.add_argument("--json", action="store_true")
+    register_run = commands.add_parser("workbench-register-run", help="register one explicit frozen G-B run")
+    register_run.add_argument("--workspace-root", type=Path, required=True)
+    register_run.add_argument("--task-dir", type=Path, required=True)
+    register_run.add_argument("--json", action="store_true")
+    repair_run = commands.add_parser("workbench-repair-run", help="explicitly repair one stale run mapping")
+    repair_run.add_argument("--workspace-root", type=Path, required=True)
+    repair_run.add_argument("--run-id", required=True)
+    repair_run.add_argument("--task-dir", type=Path, required=True)
+    repair_run.add_argument("--expected-registry-revision", type=int, required=True)
+    repair_run.add_argument("--actor", required=True)
+    repair_run.add_argument("--json", action="store_true")
+    open_session = commands.add_parser("workbench-open-session", help="open an actor-bound CLI review session")
+    open_session.add_argument("--task-dir", type=Path, required=True)
+    open_session.add_argument("--gate", required=True)
+    open_session.add_argument("--actor", required=True)
+    open_session.add_argument("--role", choices=("operator", "owner"), default="operator")
+    open_session.add_argument("--json", action="store_true")
+    decide = commands.add_parser("workbench-decide", help="submit an actor-bound workbench decision")
+    decide.add_argument("--task-dir", type=Path, required=True)
+    decide.add_argument("--session-id", required=True)
+    decide.add_argument("--gate", required=True)
+    decide.add_argument("--decision-file", type=Path, required=True)
+    decide.add_argument("--actor", required=True)
+    decide.add_argument("--role", choices=("operator", "owner"), default="operator")
+    decide.add_argument("--json", action="store_true")
+    resume_change = commands.add_parser("workbench-resume-change", help="resume one durable registered change job")
+    resume_change.add_argument("--workspace-root", type=Path, required=True)
+    resume_change.add_argument("--run-id", required=True)
+    resume_change.add_argument("--job-id", required=True)
+    resume_change.add_argument("--actor", required=True)
+    resume_change.add_argument("--json", action="store_true")
+    serve = commands.add_parser("workbench-serve", help="serve the local review workbench")
+    serve.add_argument("--workspace-root", type=Path, required=True)
+    serve.add_argument("--actor", required=True)
+    serve.add_argument("--role", choices=("operator", "owner"), default="operator")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--json", action="store_true")
     return parser
 
 
@@ -747,8 +795,11 @@ def run_gb_pair(args: argparse.Namespace) -> dict[str, object]:
         actor=args.actor,
         run_id=f"gb-cold-{int(time.time())}",
     )
+    pair_registry = RunRegistry(Path(args.pair_root).resolve(strict=True))
+    cold_registration = pair_registry.ensure_registered(cold)
     cache_result: dict[str, object] | None = None
     hot_result: dict[str, object] | None = None
+    hot_registration: dict[str, object] | None = None
     if cold_result.get("gate_status", {}).get("gate5") == "approved":
         if args.resume_existing and (hot / "pipeline_state.json").is_file():
             cache_result = reuse_existing_hot_cache(cold_root=cold, hot_root=hot)
@@ -761,6 +812,7 @@ def run_gb_pair(args: argparse.Namespace) -> dict[str, object]:
             actor=args.actor,
             run_id=f"gb-hot-{int(time.time())}",
         )
+        hot_registration = pair_registry.ensure_registered(hot)
     else:
         cache_result = {"status": "not_ready", "reason": "cold run requires fresh approvals through Gate 5"}
     status, reason = _gb_pair_status(cold_result, hot_result)
@@ -777,6 +829,11 @@ def run_gb_pair(args: argparse.Namespace) -> dict[str, object]:
         "cold": cold_result,
         "hot": hot_result,
         "cache": cache_result,
+        "run_registry": {
+            "workspace_root": str(Path(args.pair_root).resolve(strict=True)),
+            "cold": cold_registration,
+            "hot": hot_registration,
+        },
         "measurement_path": str(measurement),
         "ordinary_track_b_enabled": False,
     }
@@ -926,6 +983,43 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "gb-build-snapshots":
             payload = SnapshotStore(args.task_dir).build(rubric_path=args.rubric_input, policy_path=args.baseline_policy)
             _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
+        if args.command == "workbench-build-review":
+            payload = ReviewViewBuilder(args.task_dir).write_snapshot(args.gate)
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
+        if args.command == "workbench-register-run":
+            payload = RunRegistry(args.workspace_root).register(args.task_dir)
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
+        if args.command == "workbench-repair-run":
+            payload = RunRegistry(args.workspace_root).repair(args.run_id, args.task_dir, expected_registry_revision=args.expected_registry_revision, actor=args.actor)
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
+        if args.command == "workbench-open-session":
+            payload = ReviewSessionService(args.task_dir, actor=args.actor, role=args.role).open(args.gate)
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
+        if args.command == "workbench-decide":
+            payload = WorkbenchDecisionService(args.task_dir, actor=args.actor, role=args.role).submit(
+                session_id=args.session_id,
+                gate_id=args.gate,
+                payload=read_json_object(args.decision_file),
+            )
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK
+        if args.command == "workbench-resume-change":
+            payload = WorkbenchOrchestrator(args.workspace_root, actor=args.actor).resume_job(run_id=args.run_id, job_id=args.job_id)
+            _emit(payload, json_output=json_output, command=args.command)
+            return EXIT_OK if payload.get("status") == "completed" else EXIT_AWAITING_USER
+        if args.command == "workbench-serve":
+            if args.host not in {"127.0.0.1", "::1", "localhost"}:
+                raise ValueError("workbench host must be loopback")
+            if not 1 <= args.port <= 65535:
+                raise ValueError("workbench port is invalid")
+            if json_output:
+                _emit({"status":"starting","url":f"http://{args.host}:{args.port}/"}, json_output=True, command=args.command)
+            serve_workbench(args.workspace_root, actor=args.actor, role=args.role, host=args.host, port=args.port)
             return EXIT_OK
         raise ValueError(f"unsupported command: {args.command}")
     except AssetIndexPrerequisiteError as error:

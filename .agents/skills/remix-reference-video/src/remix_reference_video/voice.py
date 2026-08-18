@@ -167,8 +167,8 @@ class VoiceGenerator:
 
     def generate(self, approved_script_path: Path, output_dir: Path) -> dict[str, object]:
         script_path = Path(approved_script_path)
-        if script_path.is_symlink() or script_path.name != "approved_production_script.json":
-            raise VoiceError("TTS input must be approved_production_script.json")
+        if script_path.is_symlink() or script_path.suffix != ".json":
+            raise VoiceError("TTS input must be an approved production script JSON")
         script = read_json_object(script_path.resolve(strict=True))
         if script.get("artifact_type") != "approved_production_script":
             raise VoiceError("TTS input must be approved_production_script")

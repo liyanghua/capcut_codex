@@ -11,9 +11,13 @@ dependencies = ["jsonschema>=4.23,<5"]
 
 [project.optional-dependencies]
 api = ["fastapi>=0.128,<1", "uvicorn>=0.40,<1"]
+test = ["httpx2>=2,<3"]
 
 [project.scripts]
 remixctl = "remix_reference_video.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+remix_reference_video = ["templates/*.html", "static/*.js", "static/*.css"]

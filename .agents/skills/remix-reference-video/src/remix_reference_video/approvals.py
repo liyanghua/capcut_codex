@@ -287,14 +287,16 @@ class ApprovalService:
         atomic_write_json(staged, approved)
         with staged.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
-        final = self.root / "approved_production_script.json"
+        base = self.root / "approved_production_script.json"
+        final = base if not base.exists() else self.root / "versions" / "approved_production_script" / f"{transaction_id}.json"
+        artifact_path = final.relative_to(self.root).as_posix()
         return (
             ArtifactPromotion(
                 staged_path=staged,
                 final_path=final,
                 expected_type="approved_production_script",
             ),
-            {"path": "approved_production_script.json", "sha256": digest},
+            {"path": artifact_path, "sha256": digest},
         )
 
     def _task_file(self, path: Path, context: str) -> Path:

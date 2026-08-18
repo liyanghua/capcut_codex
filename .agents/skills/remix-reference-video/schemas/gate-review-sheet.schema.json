@@ -2,6 +2,28 @@
   "$schema":"https://json-schema.org/draft/2020-12/schema",
   "$id":"urn:capcut:remix-reference-video:artifact:gate-review-sheet",
   "type":"object",
-  "required":["artifact_type","schema_id","schema_version","contract_version","skill_version","run_id","gate_id","state_revision","bound_package_sha256","lifecycle_status","view_path","html_path","markdown_path"],
-  "properties":{"artifact_type":{"const":"gate_review_sheet"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-sheet"},"schema_version":{"const":"1.0.0"},"contract_version":{"const":"2.0.0-alpha.1"},"skill_version":{"const":"2.0.0-alpha.1"},"run_id":{"type":"string"},"gate_id":{"type":"string"},"state_revision":{"type":"integer"},"bound_package_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"lifecycle_status":{"const":"derived_review_only"},"view_path":{"type":"string"},"html_path":{"type":"string"},"markdown_path":{"type":"string"}}
+  "required":["artifact_type","schema_id","schema_version","contract_version","skill_version","snapshot_id","run_id","gate_id","state_revision","bound_package_sha256","lifecycle_status","trusted_service_time","policy_id","policy_version","source_versions","idempotency_key","input_hashes","supersedes_snapshot_id","view_path","html_path","markdown_path"],
+  "properties":{
+    "artifact_type":{"const":"gate_review_sheet"},
+    "schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-sheet"},
+    "schema_version":{"const":"1.0.0"},
+    "contract_version":{"const":"2.0.0-alpha.1"},
+    "skill_version":{"const":"2.0.0-alpha.1"},
+    "snapshot_id":{"type":"string","minLength":1},
+    "run_id":{"type":"string"},
+    "gate_id":{"type":"string"},
+    "state_revision":{"type":"integer"},
+    "bound_package_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "lifecycle_status":{"const":"derived_review_only"},
+    "trusted_service_time":{"type":"string","minLength":1},
+    "policy_id":{"const":"review-workbench-p0b"},
+    "policy_version":{"const":"1.0.0"},
+    "source_versions":{"type":"object","required":["contract_version","skill_version"]},
+    "idempotency_key":{"type":"string","minLength":1},
+    "input_hashes":{"type":"object"},
+    "supersedes_snapshot_id":{"type":["string","null"]},
+    "view_path":{"type":"string"},
+    "html_path":{"type":"string"},
+    "markdown_path":{"type":"string"}
+  }
 }

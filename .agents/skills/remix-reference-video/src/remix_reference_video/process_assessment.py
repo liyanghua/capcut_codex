@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 from .critical_path import CriticalPathCollector
@@ -34,7 +35,7 @@ class ProcessAssessmentBuilder:
                 current[gate] = record
         critical = CriticalPathCollector().collect(metrics)
         timing = self._timing(events)
-        gate_returns = sum(1 for event in events if event.get("event_type") in {"gate.returned", "gate.reopened", "rework_completed"})
+        gate_returns = sum(1 for event in self._dedupe_events(events) if event.get("event_type") in {"gate.returned", "gate.reopened", "rework_completed", "review.rework_completed"})
         valid_decisions = len(approvals)
         approved = sum(1 for row in approvals if row.get("decision") == "approved")
         rejected = sum(1 for row in approvals if row.get("decision") in {"rejected", "changes_requested"})
@@ -42,7 +43,8 @@ class ProcessAssessmentBuilder:
             "machine_api_critical_path_seconds": self._metric(critical["seconds"], critical["measurement_status"], "stage_metrics.jsonl"),
             "human_wait_seconds": self._metric(timing.get("human_wait_seconds"), timing["human_wait_status"], "pipeline_events.jsonl"),
             "operator_touch_seconds": self._metric(timing.get("operator_touch_seconds"), timing["operator_touch_status"], "pipeline_events.jsonl"),
-            "rework_seconds": self._not_measured("no explicit rework interval source"),
+            "decision_seconds": self._metric(timing.get("decision_seconds"), timing["decision_status"], "pipeline_events.jsonl"),
+            "rework_seconds": self._metric(timing.get("rework_seconds"), timing["rework_status"], "pipeline_events.jsonl"),
             "gate_return_count": {"value": gate_returns, "measurement_status": "measured", "evidence_path": "pipeline_events.jsonl"},
             "retry_network_seconds": self._metric(critical["retry_network_seconds"], critical["retry_network_measurement_status"], "stage_metrics.jsonl"),
             "cost": self._not_measured("cost inputs are not present"),
@@ -98,25 +100,82 @@ class ProcessAssessmentBuilder:
 
     @staticmethod
     def _timing(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-        active: dict[str, float] = {}
-        touch = 0.0
-        wait = 0.0
-        measured_touch = False
-        measured_wait = False
+        records = []
+        seen: set[str] = set()
+        for index, event in enumerate(events):
+            event_id = event.get("event_id")
+            if isinstance(event_id, str):
+                if event_id in seen: continue
+                seen.add(event_id)
+            occurred = ProcessAssessmentBuilder._event_time(event.get("occurred_at"))
+            if occurred is not None: records.append((occurred, index, event))
+        records.sort(key=lambda item: (item[0], item[1]))
+        ready: dict[str, datetime] = {}
+        first_evidence: dict[str, datetime] = {}
+        submitted: dict[str, datetime] = {}
+        accepted: dict[str, datetime] = {}
+        active: dict[tuple[str, str], datetime] = {}
+        intervals: list[tuple[str, datetime, datetime]] = []
+        changes: dict[str, datetime] = {}
+        reworks: list[float] = []
+        for occurred, _, event in records:
+            kind = event.get("event_type"); gate = str(event.get("gate_id") or "")
+            session = str(event.get("session_id") or "")
+            payload = event.get("payload") if isinstance(event.get("payload"), Mapping) else {}
+            if kind in {"command.awaiting_user", "review_package.ready"} and gate: ready[gate] = occurred
+            elif kind == "review.evidence_interaction" and session: first_evidence.setdefault(session, occurred)
+            elif kind == "review.decision_submitted" and session: submitted.setdefault(session, occurred)
+            elif kind == "review.decision_accepted" and session: accepted.setdefault(session, occurred)
+            elif kind == "review.active_start" and session:
+                interval = str(payload.get("active_interval_id") or "default")
+                active[(session, interval)] = occurred
+            elif kind in {"review.active_stop", "review.pause"} and session:
+                interval = str(payload.get("active_interval_id") or "default")
+                start = active.pop((session, interval), None)
+                if start is not None and occurred >= start: intervals.append((session, start, occurred))
+            elif kind == "change.applied":
+                key = str(event.get("job_id") or event.get("change_request_id") or gate)
+                if key: changes[key] = occurred
+            elif kind == "review.rework_completed":
+                key = str(event.get("job_id") or event.get("change_request_id") or gate)
+                start = changes.get(key)
+                if start is not None and occurred >= start: reworks.append((occurred - start).total_seconds())
+        waits: list[float] = []
+        decisions: list[float] = []
+        touches: list[float] = []
+        session_gates = {str(event.get("session_id")): str(event.get("gate_id")) for _, _, event in records if event.get("session_id") and event.get("gate_id")}
+        for session, evidence_at in first_evidence.items():
+            gate = session_gates.get(session, "")
+            if gate in ready and evidence_at >= ready[gate]: waits.append((evidence_at - ready[gate]).total_seconds())
+            if session in accepted and accepted[session] >= evidence_at: decisions.append((accepted[session] - evidence_at).total_seconds())
+        for session, start, end in intervals:
+            lower = first_evidence.get(session); upper = submitted.get(session)
+            if lower is None or upper is None: continue
+            clipped_start, clipped_end = max(start, lower), min(end, upper)
+            if clipped_end >= clipped_start: touches.append((clipped_end - clipped_start).total_seconds())
+        return {
+            "operator_touch_seconds": sum(touches) if touches else None, "operator_touch_status": "measured" if touches else "not_measured",
+            "human_wait_seconds": sum(waits) if waits else None, "human_wait_status": "measured" if waits else "not_measured",
+            "decision_seconds": sum(decisions) if decisions else None, "decision_status": "measured" if decisions else "not_measured",
+            "rework_seconds": sum(reworks) if reworks else None, "rework_status": "measured" if reworks else "not_measured",
+        }
+
+    @staticmethod
+    def _event_time(value: object) -> datetime | None:
+        if not isinstance(value, str): return None
+        try: return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError: return None
+
+    @staticmethod
+    def _dedupe_events(events: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+        result: list[Mapping[str, Any]] = []; seen: set[str] = set()
         for event in events:
-            kind = event.get("event_type")
-            payload = event.get("payload") if isinstance(event.get("payload"), Mapping) else event
-            seconds = payload.get("seconds") if isinstance(payload, Mapping) else None
-            if kind == "review.active_start" and isinstance(payload, Mapping) and isinstance(payload.get("active_interval_id"), str):
-                active[payload["active_interval_id"]] = float(payload.get("at_seconds", 0.0) or 0.0)
-            elif kind == "review.active_stop" and isinstance(payload, Mapping) and isinstance(payload.get("active_interval_id"), str) and isinstance(payload.get("at_seconds"), (int, float)):
-                start = active.pop(payload["active_interval_id"], None)
-                if start is not None:
-                    touch += max(0.0, float(payload["at_seconds"]) - start)
-                    measured_touch = True
-            elif kind == "review.wait_interval" and isinstance(seconds, (int, float)):
-                wait += max(0.0, float(seconds)); measured_wait = True
-        return {"operator_touch_seconds": touch if measured_touch else None, "operator_touch_status": "measured" if measured_touch else "not_measured", "human_wait_seconds": wait if measured_wait else None, "human_wait_status": "measured" if measured_wait else "not_measured"}
+            event_id = event.get("event_id")
+            if isinstance(event_id, str):
+                if event_id in seen: continue
+                seen.add(event_id)
+            result.append(event)
+        return result
 
     @staticmethod
     def _metric(value: object, status: str, path: str) -> dict[str, Any]:

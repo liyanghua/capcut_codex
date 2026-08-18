@@ -8,6 +8,7 @@
 /work/
 /final/
 /hot_video_ref/
+/workbench/
 
 # Python environments and generated files
 .venv/

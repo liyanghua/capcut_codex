@@ -301,6 +301,28 @@ class ApprovalServiceTests(unittest.TestCase):
             "approved",
         )
 
+    def test_gate4_reapproval_uses_versioned_script_without_overwriting_prior_approval(self) -> None:
+        candidate = self.root / "production_script_candidate.json"
+        atomic_write_json(candidate, {"artifact_type": "production_script_candidate", "lines": [{"line_id": "l1", "text": "第一版"}]})
+        preflight = self.root / "voice_preflight.json"
+        atomic_write_json(preflight, {"artifact_type": "voice_preflight", "preflight_status": "passed", "speed": 1.0, "fragments": []})
+        state = self.store.update_state(lambda current: current | {"gate_status": current["gate_status"] | {"gate1":"approved", "gate2":"approved", "gate3_material_selection":"approved", "gate3_evidence_closure":"approved", "gate3":"approved", "gate4_pre_generation":"awaiting_user"}})
+        package, digest = self.write_package("gate4_pre_generation", state_revision=state["state_revision"], input_hashes={"production_script_candidate.json": self.sha256(candidate), "voice_preflight.json": self.sha256(preflight)})
+        decision = self.write_decision(scope_ids=["production_script_candidate.json"], strategy={"tts_settings":{"provider":"doubao", "model":"DOUBAO_AUDIO", "voice":"female", "speed_ratio":1.0}})
+        self.service.approve(gate_id="gate4_pre_generation", review_package_hash=digest, decision_file=decision, actor="owner")
+        prior = (self.root / "approved_production_script.json").read_bytes()
+
+        candidate.write_text(json.dumps({"artifact_type":"production_script_candidate", "lines":[{"line_id":"l1","text":"第二版"}]}), encoding="utf-8")
+        state = self.store.update_state(lambda current: current | {"gate_status": current["gate_status"] | {"gate4_pre_generation":"awaiting_user"}})
+        package, digest = self.write_package("gate4_pre_generation", state_revision=state["state_revision"], input_hashes={"production_script_candidate.json": self.sha256(candidate), "voice_preflight.json": self.sha256(preflight)})
+        decision = self.write_decision(scope_ids=["production_script_candidate.json"], strategy={"tts_settings":{"provider":"doubao", "model":"DOUBAO_AUDIO", "voice":"female", "speed_ratio":1.0}})
+        self.service.approve(gate_id="gate4_pre_generation", review_package_hash=digest, decision_file=decision, actor="owner")
+
+        versions = sorted((self.root / "versions" / "approved_production_script").glob("*.json"))
+        self.assertEqual(len(versions), 1)
+        self.assertEqual((self.root / "approved_production_script.json").read_bytes(), prior)
+        self.assertEqual(self.store.read_state()["artifacts"]["approved_production_script"]["path"], versions[0].relative_to(self.root).as_posix())
+
     def test_gate4_pre_rejects_tts_speed_not_bound_to_preflight(self) -> None:
         candidate = self.root / "production_script_candidate.json"
         atomic_write_json(candidate, {"artifact_type": "production_script_candidate", "lines": []})

@@ -42,6 +42,25 @@ class NativeCompletionTests(unittest.TestCase):
                 "archive-approved",
             ))
 
+    def test_existing_fragment_plan_is_superseded_by_revisioned_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = TaskStorage(root)
+            store.initialize_state({"execution_mode":"track-b-production", "run_id":"run-1", "state_revision":0, "active_stage":None, "active_command":None, "stage_status":{}, "gate_status":{}, "decisions":[], "artifacts":{}, "blockers":[], "cache_summary":{}})
+            for _ in range(7):
+                store.update_state(lambda current: current)
+            atomic_write_json(root / "fragment_plan.json", {"artifact_type":"fragment_plan", "lifecycle_status":"approved"})
+            registry = register_completion_adapters(
+                NativeAdapterRegistry(root), asset_root=root,
+                voice_provider=_Provider(), voice_duration=lambda _: 1.0,
+                proxy_renderer=lambda **_: {"path": "proxy.mp4"},
+                boundary_frame_times=lambda _: [],
+                final_renderer=lambda **kwargs: _render(kwargs["output_path"]),
+                media_probe=lambda _: _media(),
+            )
+            output = registry.get("freeze-fragment-plan").declared_outputs()[0]
+            self.assertEqual(output.relative_to(root.resolve()).as_posix(), "versions/fragment_plan/r7/fragment_plan.json")
+
     def test_run_approve_resume_reaches_gate5_and_archives_in_isolated_task(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -85,11 +104,15 @@ class NativeCompletionTests(unittest.TestCase):
                 "gate_status": {**state["gate_status"], "gate1": "approved", "gate2": "approved"},
             })
             atomic_write_json(root / "stage_inputs/build-material-selection-package.json", _handoff(
-                "build-material-selection-package", {"overlay_decisions": {"fragment01": "no_action"}}
+                "build-material-selection-package", {"overlay_decisions": {"fragment01": "no_action"},
+                    "range_overrides": {"fragment01": {"start_seconds": 0.25, "end_seconds": 1.5}}}
             ))
             atomic_write_json(root / "stage_inputs/validate-script-evidence.json", _handoff(
                 "validate-script-evidence", {"evidence_rows": [{"fragment_id": "fragment01", "voice_text": "擦净",
                     "approved_claim_ids": ["clean"], "closure_decision": "closed"}]}
+            ))
+            atomic_write_json(root / "stage_inputs/voice-preflight.json", _handoff(
+                "voice-preflight", {"provider":"fixture","speaker":"female","speed":1.05}
             ))
             registry = register_completion_adapters(
                 NativeAdapterRegistry(root), asset_root=assets, voice_provider=_Provider(),
@@ -115,7 +138,7 @@ class NativeCompletionTests(unittest.TestCase):
                 if pending == "gate3_evidence_closure":
                     strategy = {}
                 if pending == "gate4_pre_generation":
-                    strategy = {"tts_settings": {"provider": "fixture", "voice": "female"}}
+                    strategy = {"tts_settings": {"provider": "fixture", "voice": "female", "speed": 1.05}}
                 atomic_write_json(decision, {"decision": "approved", "scope_type": "output_bundle", "scope_ids": [pending], "strategy": strategy})
                 ApprovalService(store).approve(
                     gate_id=pending, review_package_hash=_sha256(package), decision_file=decision, actor="fixture-owner"
@@ -129,6 +152,9 @@ class NativeCompletionTests(unittest.TestCase):
             self.assertEqual(json.loads(duration_report.read_text(encoding="utf-8"))["total_duration_seconds"], 1.0)
             self.assertTrue((root / "gate_review_packages" / "gate5.json").is_file())
             self.assertTrue((root / "final" / "remix.mp4").is_file())
+            fragment_plan = json.loads((root / "fragment_plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(fragment_plan["fragments"][0]["approved_broad_range"], {"start_seconds": 0.25, "end_seconds": 1.5})
+            self.assertEqual(json.loads((root / "voice_preflight.json").read_text(encoding="utf-8"))["speed"], 1.05)
 
 
 def _handoff(stage_id: str, payload: dict[str, object]) -> dict[str, object]:

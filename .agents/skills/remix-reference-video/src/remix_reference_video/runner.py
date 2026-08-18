@@ -17,6 +17,7 @@ from typing import Any
 
 from .contracts import CommandResult, ExecutionPlan, PlanValidationError, StagePlan
 from .orchestrator import ProductionOrchestrator, StageAdapter, default_dag
+from .review_view import ReviewViewBuilder
 from .stage_input_validator import StageInputValidator
 from .storage import (
     StorageError,
@@ -1307,8 +1308,8 @@ class ProductionRunner:
                             "invalid stage input: " + "; ".join(validation.errors)
                         )
                 execution = adapter.execute(attempt_id=attempt.attempt_id)
-                self._seal_gate_review_package(store, node, adapter)
-                artifacts = self._artifact_records(adapter)
+                review_artifacts = self._seal_gate_review_package(store, node, adapter)
+                artifacts = {**self._artifact_records(adapter), **review_artifacts}
             except BaseException as error:
                 elapsed = time.perf_counter() - started_at
                 failed = store.update_state(
@@ -1396,10 +1397,10 @@ class ProductionRunner:
 
     def _seal_gate_review_package(
         self, store: TaskStorage, node: object, adapter: StageAdapter
-    ) -> None:
+    ) -> dict[str, dict[str, str]]:
         stop_gate = getattr(node, "stop_gate", None)
         if not isinstance(stop_gate, str) or not stop_gate:
-            return
+            return {}
         package_path = self.task_root / "gate_review_packages" / f"{stop_gate}.json"
         if not package_path.is_file() or package_path.is_symlink():
             raise StorageError(f"missing Gate review package: {package_path.name}")
@@ -1425,6 +1426,20 @@ class ProductionRunner:
             }
         )
         atomic_write_json(package_path, package)
+        projected_state = {
+            **current,
+            "state_revision": predicted_revision,
+            "gate_status": {**dict(current.get("gate_status", {})), stop_gate: "awaiting_user"},
+        }
+        snapshot_paths = ReviewViewBuilder(self.task_root).write_snapshot(
+            stop_gate, projected_state=projected_state
+        )
+        records: dict[str, dict[str, str]] = {}
+        for path_text in snapshot_paths.values():
+            path = Path(path_text)
+            relative = path.relative_to(self.task_root).as_posix()
+            records[relative] = {"path": relative, "sha256": _sha256_file(path)}
+        return records
 
     def _artifact_records(self, adapter: StageAdapter) -> dict[str, dict[str, str]]:
         records: dict[str, dict[str, str]] = {}

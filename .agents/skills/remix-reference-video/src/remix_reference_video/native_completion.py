@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -14,10 +15,34 @@ from .adapters.retrieval import RetrievalAdapter
 from .adapters.script_compile import ProductionScriptCompiler
 from .artifact_validator import ArtifactValidator
 from .native_registry import NativeAdapterRegistry, NativeStageAdapter
-from .storage import TaskStorage, atomic_write_json, read_json_object
+from .storage import StorageError, TaskStorage, atomic_write_json, read_json_object
 from .timeline import TimelineBuilder
 from .voice import VoiceGenerator, VoiceProvider
 from .voice_preflight import VoicePreflight
+
+
+def _approved_script_path(root: Path) -> Path:
+    try:
+        state = read_json_object(root / "pipeline_state.json")
+        artifact = state.get("artifacts", {}).get("approved_production_script")
+        if isinstance(artifact, Mapping) and isinstance(artifact.get("path"), str):
+            candidate = (root / artifact["path"]).resolve(strict=True)
+            if root in candidate.parents and not candidate.is_symlink():
+                return candidate
+    except (OSError, KeyError, TypeError, ValueError, StorageError):
+        pass
+    return root / "approved_production_script.json"
+
+
+def _fragment_plan_path(root: Path) -> Path:
+    base = root / "fragment_plan.json"
+    if not base.exists():
+        return base
+    try:
+        revision = int(read_json_object(root / "pipeline_state.json")["state_revision"])
+    except (OSError, KeyError, TypeError, ValueError, StorageError):
+        return base
+    return root / "versions" / "fragment_plan" / f"r{revision}" / "fragment_plan.json"
 
 
 def register_completion_adapters(
@@ -41,11 +66,11 @@ def register_completion_adapters(
     matches = root / "matches.json"
     baseline = root / "content_baseline.json"
     mutation = root / "mutation_plan.json"
-    fragment_plan = root / "fragment_plan.json"
+    fragment_plan = _fragment_plan_path(root)
     evidence = root / "script_evidence_matrix.json"
     script_candidate = root / "production_script_candidate.json"
     material = root / "material_manifest.json"
-    approved_script = root / "approved_production_script.json"
+    approved_script = _approved_script_path(root)
     voice_preflight = root / "voice_preflight.json"
     voice_manifest = root / "voice" / "voice_manifest.json"
     duration_report = root / "voice" / "duration_report.json"
@@ -99,7 +124,7 @@ def register_completion_adapters(
         root, execution_stage_id="voice-preflight",
         implementation_version="voice-preflight-native-v1",
         required_inputs=(script_candidate, fragment_plan), declared_outputs=(voice_preflight,),
-        execute_fn=lambda: _run_voice_preflight(root, script_candidate, fragment_plan, voice_preflight),
+        execute_fn=lambda payload: _run_voice_preflight(root, script_candidate, fragment_plan, voice_preflight, payload),
         domain_managed_outputs=True,
     ))
     registry.register(NativeStageAdapter(
@@ -184,9 +209,59 @@ def _selection_package(root: Path, matches: Path, candidate: Path, payload: Mapp
     decisions = payload.get("overlay_decisions")
     if not isinstance(decisions, Mapping):
         raise ValueError("overlay_decisions are required")
+    matches_value = read_json_object(matches)
+    candidate_overrides = payload.get("candidate_overrides", {})
+    if not isinstance(candidate_overrides, Mapping):
+        raise ValueError("candidate_overrides must be an object")
+    if candidate_overrides:
+        matches_value = copy.deepcopy(matches_value)
+        rows = matches_value.get("fragments")
+        if not isinstance(rows, list):
+            raise ValueError("matches fragments are required")
+        for fragment_id, raw_override in candidate_overrides.items():
+            if not isinstance(fragment_id, str) or not isinstance(raw_override, Mapping):
+                raise ValueError("candidate override is invalid")
+            target = next((row for row in rows if isinstance(row, dict) and row.get("fragment_id") == fragment_id), None)
+            if target is None:
+                raise ValueError(f"candidate override fragment is unknown: {fragment_id}")
+            requested_id = raw_override.get("candidate_id")
+            requested_hash = raw_override.get("source_sha256")
+            candidates = target.get("candidates")
+            if not isinstance(candidates, list):
+                raise ValueError(f"candidate list is missing: {fragment_id}")
+            selected = next((item for item in candidates if isinstance(item, Mapping)
+                and item.get("candidate_id", item.get("asset_id")) == requested_id
+                and item.get("source_sha256", item.get("sha256")) == requested_hash), None)
+            if selected is None:
+                raise ValueError(f"candidate override is not allowlisted: {fragment_id}")
+            target["selected_asset_id"] = selected.get("asset_id", selected.get("candidate_id"))
     value = RetrievalAdapter().build_candidate_review_package(
-        matches=read_json_object(matches), overlay_decisions={str(k): str(v) for k, v in decisions.items()}
+        matches=matches_value, overlay_decisions={str(k): str(v) for k, v in decisions.items()}
     )
+    range_overrides = payload.get("range_overrides", {})
+    if not isinstance(range_overrides, Mapping):
+        raise ValueError("range_overrides must be an object")
+    selections = value.get("selections")
+    if not isinstance(selections, list):
+        raise ValueError("material selections are required")
+    for fragment_id, raw_range in range_overrides.items():
+        if not isinstance(fragment_id, str) or not isinstance(raw_range, Mapping):
+            raise ValueError("range override is invalid")
+        selection = next((row for row in selections if isinstance(row, dict) and row.get("fragment_id") == fragment_id), None)
+        if selection is None:
+            raise ValueError(f"range override fragment is unknown: {fragment_id}")
+        start = raw_range.get("start_seconds")
+        end = raw_range.get("end_seconds")
+        available = selection.get("available_source_range")
+        if (isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, (int, float))
+                or not isinstance(end, (int, float)) or not float(start) < float(end)
+                or not isinstance(available, Mapping)
+                or not isinstance(available.get("start_seconds"), (int, float))
+                or not isinstance(available.get("end_seconds"), (int, float))
+                or float(start) < float(available["start_seconds"])
+                or float(end) > float(available["end_seconds"])):
+            raise ValueError(f"range override exceeds available source: {fragment_id}")
+        selection["approved_broad_range"] = {"start_seconds": float(start), "end_seconds": float(end)}
     atomic_write_json(candidate, value)
     package = Gate3Adapter().build_material_selection_package(
         candidate_path=candidate, run_id=_state(root)["run_id"],
@@ -223,13 +298,19 @@ def _compile_script(root: Path, baseline: Path, mutation: Path, evidence: Path) 
 
 
 def _run_voice_preflight(
-    root: Path, candidate: Path, plan: Path, output: Path
+    root: Path, candidate: Path, plan: Path, output: Path, payload: Mapping[str, object]
 ) -> Mapping[str, object]:
+    speed = payload.get("speed", 1.0)
+    if isinstance(speed, bool) or not isinstance(speed, (int, float)):
+        raise ValueError("voice preflight speed is invalid")
     report = VoicePreflight().build(
         production_script=read_json_object(candidate),
         fragment_plan=read_json_object(plan),
-        speed=1.0,
+        speed=float(speed),
     )
+    report["requested_tts_settings"] = {
+        key: payload[key] for key in ("provider", "speaker", "speed") if key in payload
+    }
     report["input_hashes"] = {
         candidate.name: _sha256(candidate),
         plan.name: _sha256(plan),

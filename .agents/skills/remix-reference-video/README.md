@@ -124,6 +124,78 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py production-audi
 
 Gate 3 必须同时通过素材选择和证据闭环；Gate 4 必须先生成前批准，再真实 TTS，最后生成后听审。配音实际时长超出 Gate 3 宽范围时，必须返回受影响 Gate，不得变速或冻结尾帧补齐。
 
+## 本机审核工作台
+
+P0b 提供 localhost-only 七 Gate 审核台。它只服务显式登记的冻结 `gb-pair` cold/hot run，不会按目录名猜测任务，也不会解除普通 V2 production、共享缓存、归档或发布锁。
+
+安装 API 可选依赖并登记任务：
+
+```bash
+cd .agents/skills/remix-reference-video
+python3 -m pip install -e '.[api,test]'
+cd ../../..
+
+python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-register-run \
+  --workspace-root . \
+  --task-dir work/<frozen-task> \
+  --json
+```
+
+登记命令返回 `run_id`。使用固定本机审核身份启动服务：
+
+```bash
+python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-serve \
+  --workspace-root . \
+  --actor <operator-id> \
+  --role operator \
+  --host 127.0.0.1 \
+  --port 8765
+```
+
+浏览器打开 `http://127.0.0.1:8765/workbench/runs/<run-id>`。页面可直接通过、驳回或要求修改；修改必须先生成服务端影响预览，再二次确认。旧页面、旧哈希、旧 revision、其他 actor/session 或另一侧 cold/hot 的提交会被拒绝。
+
+如果页面不可用，先生成只读静态包：
+
+```bash
+python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-build-review \
+  --task-dir work/<frozen-task> \
+  --gate <gate-id> \
+  --json
+```
+
+输出位于 `gate_review_packages/<gate-id>.review/`。API 完全不可用时，可用相同 actor 创建 CLI session，再提交绑定当前审核包的决定：
+
+```bash
+python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-open-session \
+  --task-dir work/<frozen-task> \
+  --gate <gate-id> \
+  --actor <operator-id> \
+  --role operator \
+  --json
+
+python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-decide \
+  --task-dir work/<frozen-task> \
+  --session-id <session-id> \
+  --gate <gate-id> \
+  --decision-file <decision.json> \
+  --actor <operator-id> \
+  --role operator \
+  --json
+```
+
+修改恢复只允许冻结哈希仍匹配的已登记 run：
+
+```bash
+python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-resume-change \
+  --workspace-root . \
+  --run-id <run-id> \
+  --job-id <job-id> \
+  --actor <operator-id> \
+  --json
+```
+
+任务移动、registry revision 冲突或冻结输入漂移时不得自动修复。使用 `workbench-repair-run` 显式重绑并保留审计记录；仍冲突时重读 registry 和当前任务状态，不覆盖新条目。完整人工验收和七 Gate 检查表见项目根目录 `docs/review-workbench-manual-acceptance.md`。
+
 ## 产物位置
 
 每次任务均在 `work/YYYY-MM-DD[-slug]/` 下保存。关键产物包括 `pipeline_state.json`、`recipe.json`、`shot_blueprint.json`、`content_baseline.json`、`mutation_plan.json`、`matches.json`、`fragment_plan.json`、`voice_preflight.json`、`reconstruction_timeline.json`、`captions.srt`、`remix.mp4` 和 Gate 5 校验报告。用户确认 Gate 5 后，普通任务才可归档到 `final/`；隔离 pilot 永远留在 `work/`。

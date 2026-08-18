@@ -921,6 +921,14 @@ class ProductionRunnerTests(unittest.TestCase):
         self.assertEqual(package_value["run_id"], "fixture-run")
         self.assertEqual(package_value["state_revision"], result.state_revision_after)
         self.assertIn("created_at", package_value)
+        state = TaskStorage(self.task).read_state()
+        review_view_path = self.task / "gate_review_packages/gate1.review/gate_review_view.json"
+        review_sheet_path = self.task / "gate_review_packages/gate1.review/gate_review_sheet.json"
+        self.assertTrue(review_view_path.is_file())
+        self.assertTrue(review_sheet_path.is_file())
+        self.assertEqual(json.loads(review_view_path.read_text(encoding="utf-8"))["state_revision"], result.state_revision_after)
+        self.assertEqual(state["artifacts"]["gate_review_packages/gate1.review/gate_review_view.json"]["sha256"], hashlib.sha256(review_view_path.read_bytes()).hexdigest())
+        self.assertEqual(state["artifacts"]["gate_review_packages/gate1.review/gate_review_sheet.json"]["sha256"], hashlib.sha256(review_sheet_path.read_bytes()).hexdigest())
         self.assertEqual(approved["decision"], "approved")
 
 

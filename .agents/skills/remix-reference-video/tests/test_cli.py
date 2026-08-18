@@ -20,7 +20,8 @@ from remix_reference_video.cli import (
     main,
 )
 from remix_reference_video.production_runtime import ProductionRuntimeConfig
-from remix_reference_video.storage import TaskStorage
+from remix_reference_video.storage import TaskStorage, atomic_write_json
+from tests.frozen_run_fixture import write_frozen_run_fixture
 
 
 FIXTURE_STAGE = Path(__file__).parent / "fixtures" / "mock_stage.py"
@@ -99,6 +100,42 @@ class CliTests(unittest.TestCase):
         self.assertIn("build-production-script", runner.adapters)
         self.assertIn("generate-voice", runner.adapters)
         self.assertIn("render-final", runner.adapters)
+
+    def test_workbench_register_run_command_is_explicit_and_restart_readable(self) -> None:
+        TaskStorage(self.task).initialize_state({"execution_mode":"track-b-production","run_id":"cli-run","state_revision":0,"active_stage":None,"active_command":None,"stage_status":{},"gate_status":{},"decisions":[],"artifacts":{},"blockers":[],"cache_summary":{}})
+        write_frozen_run_fixture(self.task, pair_role="cold")
+
+        code, stdout, _ = self.invoke("workbench-register-run", "--workspace-root", str(self.workspace), "--task-dir", str(self.task), "--json")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout)["run_id"], "cli-run")
+        self.assertTrue((self.workspace / "workbench/run_registry.json").is_file())
+
+    def test_workbench_open_session_supports_cli_only_recovery(self) -> None:
+        TaskStorage(self.task).initialize_state({"execution_mode":"track-b-production","run_id":"cli-run","state_revision":0,"active_stage":None,"active_command":None,"stage_status":{},"gate_status":{"gate5":"awaiting_user"},"decisions":[],"artifacts":{},"blockers":[],"cache_summary":{}})
+        package_dir = self.task / "gate_review_packages"
+        package_dir.mkdir()
+        atomic_write_json(package_dir / "gate5.json", {"gate_id":"gate5","run_id":"cli-run","state_revision":0,"input_hashes":{}})
+
+        code, stdout, _ = self.invoke(
+            "workbench-open-session",
+            "--task-dir", str(self.task),
+            "--gate", "gate5",
+            "--actor", "operator-a",
+            "--json",
+        )
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout)
+        self.assertEqual(payload["actor"], "operator-a")
+        self.assertEqual(payload["review_identity"]["gate_id"], "gate5")
+        self.assertTrue((self.task / "workbench" / "sessions" / f"{payload['session_id']}.json").is_file())
+
+    def test_workbench_serve_rejects_non_loopback_before_server_start(self) -> None:
+        code, stdout, _ = self.invoke("workbench-serve", "--workspace-root", str(self.workspace), "--actor", "operator-a", "--host", "0.0.0.0", "--json")
+
+        self.assertEqual(code, 2)
+        self.assertIn("loopback", json.loads(stdout)["error"])
 
     def test_runtime_config_rejects_secret_fields_before_task_state_write(self) -> None:
         task = self.workspace / "work" / "config-task"

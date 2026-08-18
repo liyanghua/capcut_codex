@@ -593,7 +593,7 @@ owner review package 状态为 `building -> ready_for_owner -> approved|rejected
 - `copy`：`{"line_ids":["line02"],"text_by_id":{"line02":"..."}}`；
 - `claim_scope`：`{"claim_ids_add":[],"claim_ids_remove":["claim03"]}`，只允许 Gate 2 已批准 claim IDs 子集；
 - `voice`：`{"provider":"doubao-v3","speaker":"...","speed":1.0}`，speed 必须在已批准范围；
-- `material`：`{"fragment_id":"fragment04","candidate_id":"...","source_sha256":"...","overlay_decision":"keep|crop|replace"}`；
+- `material`：`{"fragment_id":"fragment04","candidate_id":"...","source_sha256":"...","overlay_decision":"retain_source_text|crop|cover|replace|no_action"}`；
 - `range`：`{"fragment_id":"fragment04","start_seconds":0.0,"end_seconds":2.8}`，必须为数字且 containment 于 Gate 3 broad range；
 - `rerecord`：`{"fragment_ids":["fragment04"],"approved_text_sha256":"..."}`；
 - `boundary`：`{"boundary_id":"b03","issue_type":"flash|black_frame|audio_gap|color_jump"}`；

@@ -1,12 +1,30 @@
-"""Read-only FastAPI/SSE projection over authoritative task state."""
+"""Local progress and actor-bound review workbench API."""
 
 from __future__ import annotations
 
 import json
+import hashlib
+import html
+import mimetypes
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
-from .storage import read_json_object, read_jsonl_records
+try:  # FastAPI remains an optional runtime extra.
+    from fastapi import BackgroundTasks as FastAPIBackgroundTasks
+    from fastapi import Request as FastAPIRequest
+    from fastapi import Response as FastAPIResponse
+except ImportError:  # pragma: no cover - exercised by non-API installations
+    FastAPIBackgroundTasks = Any  # type: ignore[misc,assignment]
+    FastAPIRequest = Any  # type: ignore[misc,assignment]
+    FastAPIResponse = Any  # type: ignore[misc,assignment]
+
+from .change_service import ChangeConflict, ChangeImpactAnalyzer, ChangeService, WorkbenchOrchestrator
+from .contracts import CANONICAL_GATE_ORDER
+from .review_session import ReviewSessionError, ReviewSessionService
+from .review_view import ReviewViewBuilder, ReviewViewError
+from .run_registry import RunRegistry, RunRegistryError
+from .storage import StorageError, read_json_object, read_jsonl_records
+from .workbench_decision import WorkbenchConflict, WorkbenchDecisionService
 
 
 _ARTIFACT_ALLOWLIST = frozenset(
@@ -137,17 +155,59 @@ class ProgressProjector:
         return "running"
 
 
-def create_app(workspace_root: Path) -> Any:
+def create_app(
+    workspace_root: Path,
+    *,
+    actor: str = "local-operator",
+    role: str = "operator",
+    runner_factory: object | None = None,
+    auto_resume_changes: bool = True,
+) -> Any:
     try:
-        from fastapi import FastAPI, Header, HTTPException, Response
-        from fastapi.responses import StreamingResponse
+        from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException, Request, Response
+        from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
     except ImportError as error:
         raise RuntimeError(
             "FastAPI optional extra is required: install remix-reference-video[api]"
         ) from error
 
-    projector = ProgressProjector(workspace_root)
-    app = FastAPI(title="Remix Production Progress", version="0.1.0")
+    workspace = Path(workspace_root).resolve(strict=True)
+    projector = ProgressProjector(workspace)
+    registry = RunRegistry(workspace)
+    app = FastAPI(title="Remix Review Workbench", version="0.2.0")
+
+    def run_task(run_id: str) -> Path:
+        try:
+            return registry.resolve(run_id)
+        except RunRegistryError as error:
+            status = 404 if "not registered" in str(error) else 409
+            raise HTTPException(status_code=status, detail={"error_code":"run_registry_error","message":str(error)}) from None
+
+    def current_gate(task_root: Path) -> str:
+        state = read_json_object(task_root / "pipeline_state.json")
+        gates = state.get("gate_status")
+        if not isinstance(gates, Mapping):
+            raise HTTPException(status_code=409, detail={"error_code":"invalid_state","message":"gate_status is invalid"})
+        for gate_id in CANONICAL_GATE_ORDER:
+            if gates.get(gate_id) in {"awaiting_user", "stale", "blocked", "rejected"}:
+                return gate_id
+        revision = state.get("state_revision")
+        for gate_id in reversed(CANONICAL_GATE_ORDER):
+            package = task_root / "gate_review_packages" / f"{gate_id}.json"
+            if package.is_file() and not package.is_symlink() and read_json_object(package).get("state_revision") == revision:
+                return gate_id
+        raise HTTPException(status_code=409, detail={"error_code":"review_not_ready","message":"no current Gate review package"})
+
+    def sse(notices: list[dict[str, str]]) -> Any:
+        def stream() -> Any:
+            for notice in notices:
+                yield f"id: {notice['id']}\nevent: {notice['event']}\ndata: {notice['data']}\n\n"
+        return StreamingResponse(stream(), media_type="text/event-stream")
+
+    def conflict(error: Exception, *, gate_id: str | None = None) -> Any:
+        if isinstance(error, WorkbenchConflict):
+            return JSONResponse(status_code=409, content={"error_code":"review_conflict","message":str(error),"current_revision":error.current_revision,"refresh_path":error.refresh_path})
+        return JSONResponse(status_code=409, content={"error_code":"change_conflict","message":str(error),"refresh_path":f"/api/v1/runs/current/review" if gate_id is None else f"/api/v1/runs/current/gates/{gate_id}/review"})
 
     @app.get("/tasks")
     def tasks() -> list[dict[str, object]]:
@@ -179,14 +239,204 @@ def create_app(workspace_root: Path) -> Any:
         except (KeyError, OSError):
             raise HTTPException(status_code=404, detail="task not found") from None
 
-        def stream() -> Any:
-            for notice in notices:
-                yield (
-                    f"id: {notice['id']}\n"
-                    f"event: {notice['event']}\n"
-                    f"data: {notice['data']}\n\n"
-                )
+        return sse(notices)
 
-        return StreamingResponse(stream(), media_type="text/event-stream")
+    @app.get("/api/v1/runs/{run_id}/review")
+    def run_review(run_id: str, response: FastAPIResponse) -> dict[str, object]:
+        task_root = run_task(run_id)
+        gate_id = current_gate(task_root)
+        try:
+            view = ReviewViewBuilder(task_root).build(gate_id)
+        except (ReviewViewError, OSError) as error:
+            raise HTTPException(status_code=409, detail={"error_code":"review_conflict","message":str(error)}) from None
+        response.headers["ETag"] = f'"review-{view["bound_package_sha256"]}"'
+        return view
+
+    @app.post("/api/v1/runs/{run_id}/review-session")
+    def open_review_session(run_id: str, payload: dict[str, object] = Body(...)) -> dict[str, object]:
+        task_root = run_task(run_id)
+        gate_id = payload.get("gate_id")
+        if not isinstance(gate_id, str):
+            raise HTTPException(status_code=422, detail="gate_id is required")
+        if gate_id != current_gate(task_root):
+            raise HTTPException(status_code=409, detail={"error_code":"review_conflict","message":"Gate is not current"})
+        try:
+            return ReviewSessionService(task_root, actor=actor, role=role).open(gate_id)
+        except ReviewSessionError as error:
+            raise HTTPException(status_code=409, detail={"error_code":"review_conflict","message":str(error)}) from None
+
+    @app.post("/api/v1/runs/{run_id}/review-session/events")
+    def review_event(run_id: str, payload: dict[str, object] = Body(...)) -> dict[str, object]:
+        task_root = run_task(run_id)
+        session_id = payload.get("session_id")
+        event_type = payload.get("event_type")
+        event_payload = payload.get("payload", {})
+        if not isinstance(session_id, str) or not isinstance(event_type, str) or not isinstance(event_payload, Mapping):
+            raise HTTPException(status_code=422, detail="session_id, event_type and payload are required")
+        try:
+            return ReviewSessionService(task_root, actor=actor, role=role).record_intent(session_id, event_type, event_payload)
+        except ReviewSessionError as error:
+            return conflict(error)
+
+    @app.post("/api/v1/runs/{run_id}/gates/{gate_id}/decisions")
+    def decide(run_id: str, gate_id: str, payload: dict[str, object] = Body(...)) -> Any:
+        task_root = run_task(run_id)
+        session_id = payload.get("session_id")
+        if not isinstance(session_id, str):
+            raise HTTPException(status_code=422, detail="session_id is required")
+        decision_payload = {key:value for key,value in payload.items() if key != "session_id" and key != "actor"}
+        try:
+            return WorkbenchDecisionService(task_root, actor=actor, role=role).submit(session_id=session_id, gate_id=gate_id, payload=decision_payload)
+        except WorkbenchConflict as error:
+            return conflict(error, gate_id=gate_id)
+
+    @app.post("/api/v1/runs/{run_id}/gates/{gate_id}/changes/preview")
+    def preview_change(run_id: str, gate_id: str, payload: dict[str, object] = Body(...)) -> Any:
+        task_root = run_task(run_id)
+        session_id = payload.get("session_id")
+        request_value = payload.get("request")
+        if not isinstance(session_id, str) or not isinstance(request_value, Mapping):
+            raise HTTPException(status_code=422, detail="session_id and request are required")
+        try:
+            return ChangeImpactAnalyzer(task_root, actor=actor, role=role).preview(session_id=session_id, gate_id=gate_id, request=request_value)
+        except ChangeConflict as error:
+            return conflict(error, gate_id=gate_id)
+
+    @app.post("/api/v1/runs/{run_id}/gates/{gate_id}/changes")
+    def apply_change(run_id: str, gate_id: str, background_tasks: FastAPIBackgroundTasks, payload: dict[str, object] = Body(...)) -> Any:
+        task_root = run_task(run_id)
+        session_id = payload.get("session_id")
+        request_value = payload.get("request")
+        preview_hash = payload.get("preview_hash")
+        idempotency_key = payload.get("idempotency_key")
+        if not all(isinstance(item, str) for item in (session_id, preview_hash, idempotency_key)) or not isinstance(request_value, Mapping):
+            raise HTTPException(status_code=422, detail="change binding is incomplete")
+        try:
+            result = ChangeService(task_root, actor=actor, role=role).apply(session_id=session_id, gate_id=gate_id, request=request_value, preview_hash=preview_hash, idempotency_key=idempotency_key)
+        except ChangeConflict as error:
+            return conflict(error, gate_id=gate_id)
+        if auto_resume_changes:
+            def resume_quietly() -> None:
+                try:
+                    WorkbenchOrchestrator(workspace, actor=actor, runner_factory=runner_factory).resume_job(run_id=run_id, job_id=str(result["job_id"]))
+                except BaseException:
+                    return
+            background_tasks.add_task(resume_quietly)
+        return result
+
+    @app.post("/api/v1/runs/{run_id}/jobs/{job_id}/resume")
+    def resume_job(run_id: str, job_id: str) -> Any:
+        try:
+            return WorkbenchOrchestrator(workspace, actor=actor, runner_factory=runner_factory).resume_job(run_id=run_id, job_id=job_id)
+        except (ChangeConflict, StorageError) as error:
+            return conflict(error)
+
+    @app.get("/api/v1/runs/{run_id}/events")
+    def run_events(run_id: str, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")) -> Any:
+        task_root = run_task(run_id)
+        try:
+            after = int(last_event_id or 0)
+        except ValueError:
+            after = 0
+        notices = []
+        for record in read_jsonl_records(task_root / "pipeline_events.jsonl"):
+            sequence = record.get("sequence")
+            if not isinstance(sequence, int) or sequence <= after:
+                continue
+            notices.append({"id":str(sequence),"event":"revision","data":json.dumps({"state_revision":record.get("state_revision"),"event_type":record.get("event_type")},ensure_ascii=False,separators=(",",":"))})
+        return sse(notices)
+
+    @app.get("/api/v1/runs/{run_id}/media/{relative_path:path}")
+    def media(run_id: str, relative_path: str, request: FastAPIRequest) -> Any:
+        task_root = run_task(run_id)
+        gate_id = current_gate(task_root)
+        try:
+            view = ReviewViewBuilder(task_root).build(gate_id)
+        except ReviewViewError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from None
+        allowed = {item.get("path") for item in view.get("evidence", []) if isinstance(item, Mapping) and item.get("status") == "available"}
+        if relative_path not in allowed:
+            raise HTTPException(status_code=404, detail="media not found")
+        candidate = Path(relative_path)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise HTTPException(status_code=404, detail="media not found")
+        path = task_root / candidate
+        if path.is_symlink():
+            raise HTTPException(status_code=404, detail="media not found")
+        resolved = path.resolve(strict=True)
+        if task_root not in resolved.parents or not resolved.is_file():
+            raise HTTPException(status_code=404, detail="media not found")
+        data = resolved.read_bytes()
+        etag = '"sha256-' + hashlib.sha256(data).hexdigest() + '"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag":etag})
+        media_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
+        headers = {"Accept-Ranges":"bytes","ETag":etag}
+        range_header = request.headers.get("range")
+        if not range_header:
+            return Response(content=data, media_type=media_type, headers={**headers,"Content-Length":str(len(data))})
+        parsed = _parse_byte_range(range_header, len(data))
+        if parsed is None:
+            return Response(status_code=416, headers={**headers,"Content-Range":f"bytes */{len(data)}"})
+        start, end = parsed
+        chunk = data[start:end + 1]
+        return Response(status_code=206, content=chunk, media_type=media_type, headers={**headers,"Content-Range":f"bytes {start}-{end}/{len(data)}","Content-Length":str(len(chunk))})
+
+    static_root = Path(__file__).resolve().parent
+
+    @app.get("/workbench/runs/{run_id}", response_class=HTMLResponse)
+    def workbench_page(run_id: str) -> str:
+        run_task(run_id)
+        template = (static_root / "templates" / "review_workbench.html").read_text(encoding="utf-8")
+        return template.replace("__RUN_ID__", html.escape(run_id, quote=True))
+
+    @app.get("/static/review_workbench.js")
+    def workbench_js() -> Response:
+        return Response(content=(static_root / "static" / "review_workbench.js").read_text(encoding="utf-8"), media_type="text/javascript")
+
+    @app.get("/static/review_workbench.css")
+    def workbench_css() -> Response:
+        return Response(content=(static_root / "static" / "review_workbench.css").read_text(encoding="utf-8"), media_type="text/css")
 
     return app
+
+
+def _parse_byte_range(value: str, size: int) -> tuple[int, int] | None:
+    if size <= 0 or not value.startswith("bytes=") or "," in value:
+        return None
+    raw = value[6:]
+    if "-" not in raw:
+        return None
+    first, last = raw.split("-", 1)
+    try:
+        if not first:
+            length = int(last)
+            if length <= 0:
+                return None
+            return max(0, size - length), size - 1
+        start = int(first)
+        end = size - 1 if not last else int(last)
+    except ValueError:
+        return None
+    if start < 0 or start >= size or end < start:
+        return None
+    return start, min(end, size - 1)
+
+
+def serve_workbench(
+    workspace_root: Path,
+    *,
+    actor: str,
+    role: str = "operator",
+    host: str = "127.0.0.1",
+    port: int = 8765,
+) -> None:
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise ValueError("workbench host must be loopback")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("workbench port is invalid")
+    try:
+        import uvicorn
+    except ImportError as error:
+        raise RuntimeError("FastAPI/Uvicorn optional extra is required") from error
+    uvicorn.run(create_app(workspace_root, actor=actor, role=role), host=host, port=port)
