@@ -63,7 +63,8 @@
         "phase6_score_snapshot",
         "process_assessment",
         "gate_review_view",
-        "gate_review_sheet"
+        "gate_review_sheet",
+        "workbench_workspace_view"
       ]
     },
     "schema_id": {
@@ -105,7 +106,8 @@
     {"properties":{"artifact_type":{"const":"phase6_score_snapshot"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:phase6-score-snapshot"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"process_assessment"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:process-assessment"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"gate_review_view"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-view"}},"required":["artifact_type","schema_id"]},
-    {"properties":{"artifact_type":{"const":"gate_review_sheet"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-sheet"}},"required":["artifact_type","schema_id"]}
+    {"properties":{"artifact_type":{"const":"gate_review_sheet"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-sheet"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"workbench_workspace_view"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:workbench-workspace-view"}},"required":["artifact_type","schema_id"]}
   ],
   "additionalProperties": true,
   "x-artifacts": [
@@ -138,7 +140,8 @@
     {"artifact_type":"phase6_score_snapshot","schema_id":"urn:capcut:remix-reference-video:artifact:phase6-score-snapshot","path":"measurements/<snapshot_id>/phase6_score_snapshot.json","format":"json","status":"active","track":"B","schema_path":"schemas/phase6-score-snapshot.schema.json","activation":"after_g_a"},
     {"artifact_type":"process_assessment","schema_id":"urn:capcut:remix-reference-video:artifact:process-assessment","path":"measurements/<snapshot_id>/process_assessment.json","format":"json","status":"active","track":"B","schema_path":"schemas/process-assessment.schema.json","activation":"after_g_a"},
     {"artifact_type":"gate_review_view","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-view","path":"gate_review_packages/<gate_id>.review/gate_review_view.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-view.schema.json","activation":"after_g_a"},
-    {"artifact_type":"gate_review_sheet","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-sheet","path":"gate_review_packages/<gate_id>.review/gate_review_sheet.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-sheet.schema.json","activation":"after_g_a"}
+    {"artifact_type":"gate_review_sheet","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-sheet","path":"gate_review_packages/<gate_id>.review/gate_review_sheet.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-sheet.schema.json","activation":"after_g_a"},
+    {"artifact_type":"workbench_workspace_view","schema_id":"urn:capcut:remix-reference-video:artifact:workbench-workspace-view","path":"derived/workbench_workspace_view.json","format":"json","status":"derived_review_only","track":"B","schema_path":"schemas/workbench-workspace-view.schema.json","activation":"after_g_a","production_state_authority":false}
   ],
   "x-planned-artifacts": [
     {"artifact_type":"quality_scorecard","status":"planned_track_c","activation":"after_g_b"}

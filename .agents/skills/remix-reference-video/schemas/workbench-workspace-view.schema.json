@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:workbench-workspace-view",
+  "title": "Business Workbench Workspace View",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "run_id", "state_revision", "current_gate", "lifecycle_status", "summary", "storyboard", "unclassified_assets", "preview", "timeline", "process", "decision_context", "media_allowlist"],
+  "properties": {
+    "artifact_type": {"const": "workbench_workspace_view"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:workbench-workspace-view"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "state_revision": {"type": "integer", "minimum": 0},
+    "package_revision": {"type": ["integer", "string"]},
+    "current_gate": {"enum": ["gate1", "gate2", "gate3_material_selection", "gate3_evidence_closure", "gate4_pre_generation", "gate4_post_generation", "gate5"]},
+    "lifecycle_status": {"enum": ["ready", "not_ready", "stale"]},
+    "summary": {"type": "object", "required": ["task", "product", "platform", "business_stage", "progress", "connection_ready"], "properties": {"task": {"type": "string"}, "product": {"type": "string"}, "platform": {"type": "string"}, "business_stage": {"type": "string"}, "progress": {"type": "number", "minimum": 0, "maximum": 1}, "connection_ready": {"type": "boolean"}}},
+    "storyboard": {"type": "object", "required": ["elements", "shots", "audio"], "properties": {"elements": {"type": "array"}, "shots": {"type": "array"}, "audio": {"type": "array"}}},
+    "unclassified_assets": {"type": "array", "items": {"type": "object", "required": ["asset_id", "reason", "replacement_eligible"]}},
+    "preview": {"type": "object"},
+    "timeline": {"type": "object", "required": ["source", "tracks"], "properties": {"source": {"type": "string"}, "tracks": {"type": "array"}}},
+    "process": {"type": "object", "required": ["current_stage", "stages"], "properties": {"current_stage": {"type": "string"}, "stages": {"type": "array", "minItems": 5, "maxItems": 5}}},
+    "decision_context": {"type": "object", "required": ["question", "recommendation", "evidence", "risks", "next_action", "approval_eligibility"], "properties": {"question": {"type": "string"}, "recommendation": {"type": "string"}, "evidence": {"type": "array"}, "risks": {"type": "array"}, "next_action": {"type": "string"}, "approval_eligibility": {"type": "boolean"}}},
+    "media_allowlist": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  },
+  "additionalProperties": true
+}
