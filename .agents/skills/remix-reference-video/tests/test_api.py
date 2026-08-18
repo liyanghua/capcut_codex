@@ -104,7 +104,8 @@ class ProgressApiTests(unittest.TestCase):
         self.assertEqual(script.status_code, 200)
         self.assertIn("new EventSource", script.text)
         self.assertNotIn('addEventListener("revision", () => location.reload())', script.text)
-        self.assertIn("Number(payload.state_revision) > Number(state.workspace.state_revision)", script.text)
+        self.assertIn('const current = await api("/workspace")', script.text)
+        self.assertIn("state.reloadPending", script.text)
         self.assertIn("<video", script.text)
         self.assertIn("<audio", script.text)
         self.assertIn("<img", script.text)
@@ -162,6 +163,7 @@ class ProgressApiTests(unittest.TestCase):
         self.assertTrue(Path(applied.json()["job_path"]).is_file())
         events = client.get("/api/v1/runs/run-1/events", headers={"Last-Event-ID":"2"})
         self.assertEqual(events.status_code, 200)
+        self.assertIn("retry: 15000", events.text)
         self.assertIn("event: revision", events.text)
 
     @unittest.skipUnless(importlib.util.find_spec("fastapi"), "FastAPI optional extra unavailable")

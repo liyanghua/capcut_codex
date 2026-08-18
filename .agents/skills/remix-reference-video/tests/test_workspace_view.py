@@ -114,6 +114,43 @@ class WorkspaceViewTests(unittest.TestCase):
         with self.assertRaises(WorkspaceMediaError):
             authorizer.authorize(view, "media/link.mp4")
 
+    def test_projects_nested_v2_brief_and_materialized_selected_assets(self) -> None:
+        self.write("project_brief.json", {"project": {"title": "桌垫复刻"}, "product": {"name": "透明桌垫"}, "target": {"platform": "抖音"}})
+        self.write("recipe.json", {"shots": [{"shot_id": "shot001", "clip_path": "video_clips/shots/shot001.mp4", "keyframe_path": "video_clips/keyframes/shot001.jpg", "start_seconds": 0, "end_seconds": 1}]})
+        self.write("content_baseline.json", {"claims": [], "fragments": [{"fragment_id": "fragment01", "narration": "展示透明质感"}]})
+        self.write("matches.json", {"fragments": [{"fragment_id": "fragment01", "selected_asset_id": "asset-1", "candidates": [{"asset_id": "asset-1", "source_path": "source.mp4"}]}]})
+        self.write("fragment_plan.json", {"fragments": [{"fragment_id": "fragment01", "asset_id": "asset-1", "source_path": "source.mp4", "approved_broad_range": {"start_seconds": 0, "end_seconds": 1}}]})
+        (self.root / "video_clips/shots").mkdir(parents=True)
+        (self.root / "video_clips/keyframes").mkdir(parents=True)
+        (self.root / "video_clips/shots/shot001.mp4").write_bytes(b"reference")
+        (self.root / "video_clips/keyframes/shot001.jpg").write_bytes(b"frame")
+        (self.root / "material/fragment01").mkdir(parents=True)
+        (self.root / "material/fragment01/source.mp4").write_bytes(b"source")
+
+        view = self.builder.build("gate3_material_selection")
+
+        self.assertEqual(view["summary"]["task"], "桌垫复刻")
+        self.assertEqual(view["summary"]["product"], "透明桌垫")
+        self.assertEqual(view["summary"]["platform"], "抖音")
+        self.assertEqual(view["storyboard"]["shots"][0]["thumbnail_ref"], "video_clips/keyframes/shot001.jpg")
+        production = next(row for row in view["storyboard"]["shots"] if row["shot_id"] == "shot-fragment01")
+        self.assertEqual(production["media_ref"], "material/fragment01/source.mp4")
+        self.assertEqual(production["purpose"], "展示透明质感")
+        self.assertNotIn("material/fragment01/source.mp4", [row["media_ref"] for row in view["unclassified_assets"]])
+
+    def test_gate5_projects_real_voice_and_subtitle_tracks(self) -> None:
+        self.write("reconstruction_timeline.json", {"fragments": [{"fragment_id": "fragment01", "text": "透明桌垫，防水。", "timeline_start_seconds": 0, "timeline_end_seconds": 2.5}]})
+        self.write("final_validation_report.json", {})
+        self.write("render_report.json", {})
+        (self.root / "captions.srt").write_text("1\n00:00:00,000 --> 00:00:02,500\n透明桌垫，防水。\n", encoding="utf-8")
+        (self.root / "remix.mp4").write_bytes(b"video")
+
+        view = self.builder.build("gate5")
+
+        tracks = {row["track_id"]: row["segments"] for row in view["timeline"]["tracks"]}
+        self.assertEqual(tracks["voice"][0]["label"], "透明桌垫，防水。")
+        self.assertEqual(tracks["subtitles"][0]["start_seconds"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

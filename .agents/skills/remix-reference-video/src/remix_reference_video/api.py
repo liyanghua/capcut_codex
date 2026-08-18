@@ -206,6 +206,7 @@ def create_app(
 
     def sse(notices: list[dict[str, str]]) -> Any:
         def stream() -> Any:
+            yield "retry: 15000\n\n"
             for notice in notices:
                 yield f"id: {notice['id']}\nevent: {notice['event']}\ndata: {notice['data']}\n\n"
         return StreamingResponse(stream(), media_type="text/event-stream")

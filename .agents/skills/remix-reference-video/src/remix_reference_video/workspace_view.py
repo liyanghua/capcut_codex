@@ -75,9 +75,9 @@ class WorkbenchWorkspaceBuilder:
         missing = [name for name in required if not self._exists(name)]
         blockers = [item for item in state.get("blockers", []) if isinstance(item, Mapping) and item.get("requires_user", True)]
         lifecycle = "not_ready" if missing or blockers or state.get("gate_status", {}).get(gate_id) == "not_ready" else "ready"
-        task = self._text(brief, ("task_name", "name", "title")) or "待确认"
-        product = self._text(brief, ("product_name", "product", "product_label")) or "待确认"
-        platform = self._text(brief, ("platform", "target_platform")) or "待确认"
+        task = self._text(brief, ("task_name", "name", "title")) or self._nested_text(brief, "project", ("title", "name", "slug")) or "待确认"
+        product = self._text(brief, ("product_name", "product_label")) or self._nested_text(brief, "product", ("name", "label")) or "待确认"
+        platform = self._text(brief, ("platform", "target_platform")) or self._nested_text(brief, "target", ("platform",)) or "待确认"
         progress = round((stage_index + (1 if lifecycle == "ready" else 0)) / len(_BUSINESS_STAGES), 2)
         statuses = state.get("gate_status") if isinstance(state.get("gate_status"), Mapping) else {}
         stages = []
@@ -161,6 +161,11 @@ class WorkbenchWorkspaceBuilder:
                 return item.strip()
         return None
 
+    @classmethod
+    def _nested_text(cls, value: Mapping[str, Any] | None, section: str, keys: tuple[str, ...]) -> str | None:
+        nested = value.get(section) if isinstance(value, Mapping) else None
+        return cls._text(nested if isinstance(nested, Mapping) else None, keys)
+
     def _storyboard(self, recipe: Mapping[str, Any] | None, blueprint: Mapping[str, Any] | None, baseline: Mapping[str, Any] | None, matches: Mapping[str, Any] | None, plan: Mapping[str, Any] | None, evidence: Mapping[str, Any] | None, state: Mapping[str, Any]) -> dict[str, Any]:
         recipe_shots = recipe.get("shots", []) if isinstance(recipe, Mapping) else []
         if not isinstance(recipe_shots, list):
@@ -176,8 +181,10 @@ class WorkbenchWorkspaceBuilder:
             if not isinstance(raw, Mapping):
                 continue
             raw_id = str(raw.get("shot_id") or raw.get("id") or index + 1)
-            reference_ref = raw.get("media_ref") or raw.get("path")
-            shots.append({"shot_id": f"shot-{raw_id}", "order": index + 1, "business_label": str(raw.get("label") or raw.get("title") or "待确认"), "purpose": str(raw.get("purpose") or raw.get("narrative_role") or "待确认"), "status": "ready", "thumbnail_ref": reference_ref if isinstance(reference_ref, str) else None, "reference_media_ref": reference_ref if isinstance(reference_ref, str) else None, "start_seconds": raw.get("start_seconds"), "end_seconds": raw.get("end_seconds")})
+            reference_ref = raw.get("clip_path") or raw.get("media_ref") or raw.get("path")
+            thumbnail_ref = raw.get("keyframe_path") or reference_ref
+            shots.append({"shot_id": f"shot-{raw_id}", "order": index + 1, "business_label": str(raw.get("label") or raw.get("title") or f"参考分镜 {index + 1}"), "purpose": str(raw.get("purpose") or raw.get("narrative_role") or "参考节奏"), "status": "ready", "thumbnail_ref": thumbnail_ref if isinstance(thumbnail_ref, str) else None, "reference_media_ref": reference_ref if isinstance(reference_ref, str) else None, "start_seconds": raw.get("start_seconds"), "end_seconds": raw.get("end_seconds")})
+        baseline_rows = {str(row.get("fragment_id")): row for row in (baseline or {}).get("fragments", []) if isinstance(row, Mapping) and row.get("fragment_id") is not None}
         for index, raw in enumerate(fragments):
             if not isinstance(raw, Mapping):
                 continue
@@ -186,9 +193,17 @@ class WorkbenchWorkspaceBuilder:
             candidate = row.get("selected_candidate") if isinstance(row, Mapping) else None
             if not isinstance(candidate, Mapping):
                 candidates = row.get("candidates", []) if isinstance(row, Mapping) else []
-                candidate = candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else {}
-            path = candidate.get("path") if isinstance(candidate, Mapping) else None
-            shots.append({"shot_id": f"shot-{fragment_id}", "order": len(shots) + 1, "business_label": str(raw.get("label") or raw.get("title") or fragment_id), "purpose": str(raw.get("narration") or raw.get("purpose") or "待确认"), "status": "ready" if path else "not_ready", "thumbnail_ref": path if isinstance(path, str) else None, "media_ref": path if isinstance(path, str) else None, "reference_media_ref": raw.get("reference_media_ref")})
+                selected_id = row.get("selected_asset_id") if isinstance(row, Mapping) else raw.get("asset_id")
+                candidate = next((item for item in candidates if isinstance(item, Mapping) and item.get("asset_id") == selected_id), None) if isinstance(candidates, list) else None
+                if not isinstance(candidate, Mapping):
+                    candidate = candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else {}
+            source_path = raw.get("source_path") or candidate.get("source_path") or candidate.get("path")
+            material_path = f"material/{fragment_id}/{Path(str(source_path)).name}" if isinstance(source_path, str) else None
+            path = material_path if isinstance(material_path, str) and self._exists(material_path) else None
+            baseline_row = baseline_rows.get(fragment_id, {})
+            label = raw.get("label") or raw.get("title") or baseline_row.get("label") or f"生产分镜 {index + 1}"
+            purpose = raw.get("narration") or raw.get("purpose") or baseline_row.get("narration") or baseline_row.get("intent") or "产品展示"
+            shots.append({"shot_id": f"shot-{fragment_id}", "order": len(shots) + 1, "business_label": str(label), "purpose": str(purpose), "status": "ready" if path else "not_ready", "thumbnail_ref": path, "media_ref": path, "reference_media_ref": raw.get("reference_media_ref")})
         elements = []
         for row in (baseline or {}).get("claims", []) if isinstance(baseline, Mapping) else []:
             if isinstance(row, Mapping):
@@ -206,7 +221,7 @@ class WorkbenchWorkspaceBuilder:
         for index, raw in enumerate(rows):
             if isinstance(raw, Mapping):
                 fragment_id = str(raw.get("fragment_id") or index + 1)
-                result.append({"audio_id": f"audio-{fragment_id}", "business_label": str(raw.get("narration") or raw.get("text") or "待确认"), "purpose": "口播", "status": "ready"})
+                result.append({"audio_id": f"audio-{fragment_id}", "business_label": str(raw.get("voice_text") or raw.get("narration") or raw.get("text") or "待确认"), "purpose": "口播", "status": "ready"})
         return result
 
     def _timeline(self, gate_id: str, recipe: Mapping[str, Any] | None, plan: Mapping[str, Any] | None, reconstruction: Mapping[str, Any] | None, final_validation: Mapping[str, Any] | None, render_report: Mapping[str, Any] | None, storyboard: Mapping[str, Any]) -> dict[str, Any]:
@@ -229,8 +244,21 @@ class WorkbenchWorkspaceBuilder:
         for index, row in enumerate(rows):
             start = row.get("approved_broad_range", {}).get("start_seconds") if isinstance(row.get("approved_broad_range"), Mapping) else row.get("start_seconds", row.get("timeline_start_seconds"))
             end = row.get("approved_broad_range", {}).get("end_seconds") if isinstance(row.get("approved_broad_range"), Mapping) else row.get("end_seconds", row.get("timeline_end_seconds"))
-            picture.append({"segment_id": f"timeline-shot-{row.get('fragment_id') or row.get('shot_id') or index + 1}", "label": str(row.get("purpose") or row.get("narration") or "待确认"), "start_seconds": start, "end_seconds": end})
-        return {"source": source, "tracks": [{"track_id": "picture", "kind": "画面", "segments": picture}, {"track_id": "voice", "kind": "口播", "segments": []}, {"track_id": "subtitles", "kind": "字幕", "segments": []}]}
+            picture.append({"segment_id": f"timeline-shot-{row.get('fragment_id') or row.get('shot_id') or index + 1}", "label": str(row.get("text") or row.get("purpose") or row.get("narration") or f"画面 {index + 1}"), "start_seconds": start, "end_seconds": end})
+        voice = []
+        subtitles = []
+        if isinstance(reconstruction, Mapping):
+            measured = reconstruction.get("fragments", [])
+            for index, row in enumerate(measured if isinstance(measured, list) else []):
+                if not isinstance(row, Mapping):
+                    continue
+                fragment_id = str(row.get("fragment_id") or index + 1)
+                start = row.get("timeline_start_seconds")
+                end = row.get("timeline_end_seconds")
+                text = str(row.get("text") or f"口播 {index + 1}")
+                voice.append({"segment_id": f"timeline-voice-{fragment_id}", "label": text, "start_seconds": start, "end_seconds": end})
+                subtitles.append({"segment_id": f"timeline-subtitle-{fragment_id}", "label": text, "start_seconds": start, "end_seconds": end})
+        return {"source": source, "tracks": [{"track_id": "picture", "kind": "画面", "segments": picture}, {"track_id": "voice", "kind": "口播", "segments": voice}, {"track_id": "subtitles", "kind": "字幕", "segments": subtitles}]}
 
     @staticmethod
     def _preview(gate_id: str, recipe: Mapping[str, Any] | None, final_validation: Mapping[str, Any] | None, allowlist: list[str]) -> dict[str, Any]:
@@ -267,7 +295,7 @@ class WorkbenchWorkspaceBuilder:
         selected = {row.get("media_ref") for row in storyboard.get("shots", []) if isinstance(row, Mapping) and isinstance(row.get("media_ref"), str)}
         result = []
         for path in allowlist:
-            if path not in selected and not path.startswith("reference-") and path != "remix.mp4":
+            if path not in selected and (path.startswith("material/") or path.startswith("media/")):
                 result.append({"asset_id": "asset-" + hashlib.sha256(path.encode()).hexdigest()[:16], "media_ref": path, "reason": "尚未匹配", "replacement_eligible": False, "status": "unclassified"})
         return result
 

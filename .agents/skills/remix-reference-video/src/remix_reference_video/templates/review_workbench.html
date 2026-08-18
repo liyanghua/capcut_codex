@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>视频审核工作区</title>
   <link rel="stylesheet" href="/static/review_workbench.css">
+  <style>
+    .preview-stage{height:clamp(360px,56vh,620px);min-height:360px}
+    .preview-stage video{display:block;height:clamp(360px,56vh,620px);max-height:clamp(360px,56vh,620px);width:auto;max-width:100%;aspect-ratio:9/16;object-fit:contain}
+    .preview-stage img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
+  </style>
 </head>
 <body data-run-id="__RUN_ID__">
   <header class="topbar">
