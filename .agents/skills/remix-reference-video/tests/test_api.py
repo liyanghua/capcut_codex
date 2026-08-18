@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from remix_reference_video.api import ProgressProjector, create_app
@@ -78,7 +79,8 @@ class ProgressApiTests(unittest.TestCase):
     def test_workbench_review_session_events_and_page_routes(self) -> None:
         from fastapi.testclient import TestClient
 
-        client = TestClient(create_app(self.workspace, actor="operator-a"))
+        with patch.dict("os.environ", {"WORKBENCH_UI_MODE": "workspace"}, clear=False):
+            client = TestClient(create_app(self.workspace, actor="operator-a"))
         review = client.get("/api/v1/runs/run-1/review")
         self.assertEqual(review.status_code, 200)
         self.assertEqual(review.json()["gate_id"], "gate3_material_selection")
@@ -91,20 +93,46 @@ class ProgressApiTests(unittest.TestCase):
         self.assertEqual(self.store.read_events()[-1]["actor"], "operator-a")
         page = client.get("/workbench/runs/run-1")
         self.assertEqual(page.status_code, 200)
+        self.assertIn('id="preview-stage"', page.text)
+        self.assertIn('id="decision-assistant"', page.text)
+        self.assertIn('id="review-timeline"', page.text)
         self.assertIn("data-action=\"approve\"", page.text)
         self.assertIn("data-action=\"reject\"", page.text)
         self.assertIn("data-action=\"request_changes\"", page.text)
-        self.assertIn("id=\"change-fields\"", page.text)
-        self.assertNotIn("id=\"change-payload\"", page.text)
+        self.assertIn("id=\"change-target\"", page.text)
         script = client.get("/static/review_workbench.js")
         self.assertEqual(script.status_code, 200)
         self.assertIn("new EventSource", script.text)
         self.assertNotIn('addEventListener("revision", () => location.reload())', script.text)
-        self.assertIn("Number(payload.state_revision) > Number(state.view.state_revision)", script.text)
+        self.assertIn("Number(payload.state_revision) > Number(state.workspace.state_revision)", script.text)
         self.assertIn("<video", script.text)
         self.assertIn("<audio", script.text)
         self.assertIn("<img", script.text)
         self.assertEqual(client.get("/static/review_workbench.js").status_code, 200)
+
+    @unittest.skipUnless(importlib.util.find_spec("fastapi"), "FastAPI optional extra unavailable")
+    def test_workspace_snapshot_has_etag_and_304(self) -> None:
+        from fastapi.testclient import TestClient
+
+        client = TestClient(create_app(self.workspace, actor="operator-a"))
+        response = client.get("/api/v1/runs/run-1/workspace")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["artifact_type"], "workbench_workspace_view")
+        self.assertEqual(payload["current_gate"], "gate3_material_selection")
+        self.assertIn("storyboard", payload)
+        self.assertIn("media_allowlist", payload)
+        self.assertEqual(client.get("/api/v1/runs/run-1/workspace", headers={"If-None-Match":response.headers["etag"]}).status_code, 304)
+
+    @unittest.skipUnless(importlib.util.find_spec("fastapi"), "FastAPI optional extra unavailable")
+    def test_invalid_ui_mode_fails_closed_to_legacy(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with patch.dict("os.environ", {"WORKBENCH_UI_MODE": "unexpected"}, clear=False):
+            client = TestClient(create_app(self.workspace, actor="operator-a"))
+        page = client.get("/workbench/runs/run-1")
+        self.assertIn("视频审核工作台", page.text)
+        self.assertNotIn('id="preview-stage"', page.text)
 
     @unittest.skipUnless(importlib.util.find_spec("fastapi"), "FastAPI optional extra unavailable")
     def test_media_range_allowlist_etag_and_416(self) -> None:

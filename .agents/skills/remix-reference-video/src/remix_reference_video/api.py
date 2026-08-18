@@ -6,6 +6,7 @@ import json
 import hashlib
 import html
 import mimetypes
+import os
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -25,6 +26,8 @@ from .review_view import ReviewViewBuilder, ReviewViewError
 from .run_registry import RunRegistry, RunRegistryError
 from .storage import StorageError, read_json_object, read_jsonl_records
 from .workbench_decision import WorkbenchConflict, WorkbenchDecisionService
+from .workspace_media import WorkspaceMediaAuthorizer, WorkspaceMediaError
+from .workspace_view import WorkbenchWorkspaceBuilder, WorkspaceViewError
 
 
 _ARTIFACT_ALLOWLIST = frozenset(
@@ -174,6 +177,9 @@ def create_app(
     workspace = Path(workspace_root).resolve(strict=True)
     projector = ProgressProjector(workspace)
     registry = RunRegistry(workspace)
+    ui_mode = os.environ.get("WORKBENCH_UI_MODE", "legacy").strip().lower()
+    if ui_mode not in {"legacy", "workspace"}:
+        ui_mode = "legacy"
     app = FastAPI(title="Remix Review Workbench", version="0.2.0")
 
     def run_task(run_id: str) -> Path:
@@ -250,6 +256,21 @@ def create_app(
         except (ReviewViewError, OSError) as error:
             raise HTTPException(status_code=409, detail={"error_code":"review_conflict","message":str(error)}) from None
         response.headers["ETag"] = f'"review-{view["bound_package_sha256"]}"'
+        return view
+
+    @app.get("/api/v1/runs/{run_id}/workspace")
+    def run_workspace(run_id: str, request: FastAPIRequest, response: FastAPIResponse) -> Any:
+        task_root = run_task(run_id)
+        gate_id = current_gate(task_root)
+        try:
+            view = WorkbenchWorkspaceBuilder(task_root).build(gate_id)
+        except (WorkspaceViewError, OSError) as error:
+            raise HTTPException(status_code=409, detail={"error_code": "workspace_conflict", "message": str(error)}) from None
+        snapshot = json.dumps(view, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        etag = '"workspace-' + hashlib.sha256(snapshot).hexdigest() + '"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        response.headers["ETag"] = etag
         return view
 
     @app.post("/api/v1/runs/{run_id}/review-session")
@@ -351,21 +372,28 @@ def create_app(
         task_root = run_task(run_id)
         gate_id = current_gate(task_root)
         try:
-            view = ReviewViewBuilder(task_root).build(gate_id)
-        except ReviewViewError as error:
-            raise HTTPException(status_code=409, detail=str(error)) from None
-        allowed = {item.get("path") for item in view.get("evidence", []) if isinstance(item, Mapping) and item.get("status") == "available"}
-        if relative_path not in allowed:
-            raise HTTPException(status_code=404, detail="media not found")
-        candidate = Path(relative_path)
-        if candidate.is_absolute() or ".." in candidate.parts:
-            raise HTTPException(status_code=404, detail="media not found")
-        path = task_root / candidate
-        if path.is_symlink():
-            raise HTTPException(status_code=404, detail="media not found")
-        resolved = path.resolve(strict=True)
-        if task_root not in resolved.parents or not resolved.is_file():
-            raise HTTPException(status_code=404, detail="media not found")
+            workspace_view = WorkbenchWorkspaceBuilder(task_root).build(gate_id)
+            authorizer = WorkspaceMediaAuthorizer(task_root)
+            try:
+                authorized = authorizer.authorize(
+                    workspace_view,
+                    relative_path,
+                    run_id=run_id,
+                    state_revision=workspace_view["state_revision"],
+                    package_revision=workspace_view.get("package_revision"),
+                )
+            except WorkspaceMediaError:
+                legacy_view = ReviewViewBuilder(task_root).build(gate_id)
+                legacy_paths = [
+                    item.get("path") for item in legacy_view.get("evidence", [])
+                    if isinstance(item, Mapping) and item.get("status") == "available" and isinstance(item.get("path"), str)
+                ]
+                legacy_projection = dict(workspace_view)
+                legacy_projection["media_allowlist"] = sorted(set(workspace_view.get("media_allowlist", [])) | set(legacy_paths))
+                authorized = authorizer.authorize(legacy_projection, relative_path, run_id=run_id, state_revision=workspace_view["state_revision"], package_revision=workspace_view.get("package_revision"))
+        except (WorkspaceViewError, ReviewViewError, WorkspaceMediaError, OSError) as error:
+            raise HTTPException(status_code=404, detail="media not found") from error
+        resolved = task_root / authorized
         data = resolved.read_bytes()
         etag = '"sha256-' + hashlib.sha256(data).hexdigest() + '"'
         if request.headers.get("if-none-match") == etag:
@@ -387,16 +415,19 @@ def create_app(
     @app.get("/workbench/runs/{run_id}", response_class=HTMLResponse)
     def workbench_page(run_id: str) -> str:
         run_task(run_id)
-        template = (static_root / "templates" / "review_workbench.html").read_text(encoding="utf-8")
+        template_name = "review_workbench.html" if ui_mode == "workspace" else "review_workbench_legacy.html"
+        template = (static_root / "templates" / template_name).read_text(encoding="utf-8")
         return template.replace("__RUN_ID__", html.escape(run_id, quote=True))
 
     @app.get("/static/review_workbench.js")
     def workbench_js() -> Response:
-        return Response(content=(static_root / "static" / "review_workbench.js").read_text(encoding="utf-8"), media_type="text/javascript")
+        name = "review_workbench.js" if ui_mode == "workspace" else "review_workbench_legacy.js"
+        return Response(content=(static_root / "static" / name).read_text(encoding="utf-8"), media_type="text/javascript")
 
     @app.get("/static/review_workbench.css")
     def workbench_css() -> Response:
-        return Response(content=(static_root / "static" / "review_workbench.css").read_text(encoding="utf-8"), media_type="text/css")
+        name = "review_workbench.css" if ui_mode == "workspace" else "review_workbench_legacy.css"
+        return Response(content=(static_root / "static" / name).read_text(encoding="utf-8"), media_type="text/css")
 
     return app
 

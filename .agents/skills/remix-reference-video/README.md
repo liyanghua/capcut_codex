@@ -154,6 +154,15 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-serve
 
 浏览器打开 `http://127.0.0.1:8765/workbench/runs/<run-id>`。页面可直接通过、驳回或要求修改；修改必须先生成服务端影响预览，再二次确认。旧页面、旧哈希、旧 revision、其他 actor/session 或另一侧 cold/hot 的提交会被拒绝。
 
+工作台页面支持启动时灰度切换：
+
+```bash
+WORKBENCH_UI_MODE=workspace python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-serve \
+  --workspace-root . --actor <operator-id> --host 127.0.0.1 --port 8765
+```
+
+`workspace` 模式显示故事板、未归类素材、中央预览、三轨只读时间线和五阶段决策助手；默认值和无效值均为 `legacy`，可用 `WORKBENCH_UI_MODE=legacy` 立即回退。时间线只能定位、播放和发起结构化修改，不能直接拖拽写入成片。工作区 `/api/v1/runs/<run-id>/workspace` 是只读业务投影，ETag 绑定当前 `state_revision`；媒体仍必须通过当前 run 的 allowlist 和 containment 校验。
+
 如果页面不可用，先生成只读静态包：
 
 ```bash

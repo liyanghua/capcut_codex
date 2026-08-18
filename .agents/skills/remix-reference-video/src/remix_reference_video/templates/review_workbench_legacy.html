@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>视频审核工作台</title>
+  <link rel="stylesheet" href="/static/review_workbench.css">
+</head>
+<body data-run-id="__RUN_ID__">
+  <header class="topbar">
+    <div><strong>视频审核工作台</strong><span id="run-label"></span></div>
+    <span id="connection-status" class="status">连接中</span>
+  </header>
+  <main>
+    <section class="summary-band" aria-live="polite">
+      <div>
+        <p id="gate-name" class="eyebrow">加载中</p>
+        <h1 id="decision-question">正在读取当前审核包</h1>
+        <p id="current-step"></p>
+      </div>
+      <div id="recommendation" class="recommendation"></div>
+    </section>
+
+    <nav id="gate-tabs" class="gate-tabs" aria-label="审核阶段"></nav>
+
+    <section class="workspace">
+      <div class="evidence-pane">
+        <h2>审核证据</h2>
+        <div id="evidence-list" class="evidence-list"></div>
+      </div>
+      <aside class="decision-pane">
+        <h2>业务影响</h2>
+        <ul id="business-impacts"></ul>
+        <div id="risks" class="risks"></div>
+        <label for="decision-note">审核意见</label>
+        <textarea id="decision-note" rows="4" placeholder="填写驳回原因或修改要求"></textarea>
+        <div class="decision-actions">
+          <button type="button" class="primary" data-action="approve">通过</button>
+          <button type="button" data-action="request_changes">要求修改</button>
+          <button type="button" class="danger" data-action="reject">驳回</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="change-dialog">
+    <form id="change-form" method="dialog">
+      <header><h2>要求修改</h2><button type="button" class="icon-button" data-close aria-label="关闭">×</button></header>
+      <label for="change-type">修改类型</label>
+      <select id="change-type" name="change_type"></select>
+      <div id="change-fields"></div>
+      <label for="change-reason">业务原因</label>
+      <textarea id="change-reason" name="reason" rows="3" required></textarea>
+      <div id="impact-preview" class="impact-preview" hidden></div>
+      <footer><button type="button" data-preview>预览影响</button><button type="button" class="primary" data-confirm disabled>确认修改</button></footer>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/review_workbench.js" defer></script>
+</body>
+</html>

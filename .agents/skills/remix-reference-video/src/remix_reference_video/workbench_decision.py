@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from .approvals import ApprovalError, ApprovalService
 from .review_session import ReviewSessionService
 from .storage import StorageError, TaskStorage, atomic_write_json, read_json_object
+from .workspace_view import WorkbenchWorkspaceBuilder, WorkspaceViewError
 
 
 class WorkbenchConflict(StorageError):
@@ -46,11 +47,21 @@ class WorkbenchDecisionService:
         if identity.get("gate_id") != gate_id:
             raise WorkbenchConflict("session Gate mismatch", current_revision=self._revision(), refresh_path=self._refresh(gate_id))
         state = self.storage.read_state()
-        self.sessions.record_server_event(session_id, "review.decision_submitted", {"decision": normalized["decision"]})
         current_revision = int(state["state_revision"])
         if normalized["state_revision"] != current_revision or normalized["review_package_hash"] != identity.get("review_package_hash"):
             self._conflicted(session_id, gate_id, current_revision, "review identity changed")
             raise WorkbenchConflict("review identity changed", current_revision=current_revision, refresh_path=self._refresh(gate_id))
+        if normalized["decision"] == "rejected" and not str(normalized.get("note") or "").strip():
+            raise WorkbenchConflict("rejection reason is required", current_revision=current_revision, refresh_path=self._refresh(gate_id))
+        if normalized["decision"] == "approved":
+            try:
+                workspace = WorkbenchWorkspaceBuilder(self.root).build(gate_id)
+            except (WorkspaceViewError, OSError) as error:
+                raise WorkbenchConflict(str(error), current_revision=current_revision, refresh_path=self._refresh(gate_id)) from error
+            context = workspace.get("decision_context")
+            if not isinstance(context, Mapping) or context.get("approval_eligibility") is not True:
+                raise WorkbenchConflict("当前审核内容仍有阻塞，不能通过", current_revision=current_revision, refresh_path=self._refresh(gate_id))
+        self.sessions.record_server_event(session_id, "review.decision_submitted", {"decision": normalized["decision"]})
         request_dir = self.root / "workbench" / "decision_requests"; request_dir.mkdir(parents=True, exist_ok=True)
         decision_path = request_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
         atomic_write_json(decision_path, {"decision":normalized["decision"],"scope_type":_SCOPES[gate_id],"scope_ids":normalized["scope_ids"],"strategy":normalized["strategy"],"note":normalized.get("note")})

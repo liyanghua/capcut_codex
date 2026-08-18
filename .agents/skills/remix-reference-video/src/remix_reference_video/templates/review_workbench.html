@@ -3,59 +3,45 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>视频审核工作台</title>
+  <title>视频审核工作区</title>
   <link rel="stylesheet" href="/static/review_workbench.css">
 </head>
 <body data-run-id="__RUN_ID__">
   <header class="topbar">
-    <div><strong>视频审核工作台</strong><span id="run-label"></span></div>
-    <span id="connection-status" class="status">连接中</span>
+    <div class="brand"><strong>视频审核工作区</strong><span id="run-label"></span></div>
+    <div class="top-meta"><span id="business-stage">加载中</span><span id="progress-label">0%</span><span id="connection-status" class="status">连接中</span></div>
   </header>
-  <main>
-    <section class="summary-band" aria-live="polite">
-      <div>
-        <p id="gate-name" class="eyebrow">加载中</p>
-        <h1 id="decision-question">正在读取当前审核包</h1>
-        <p id="current-step"></p>
-      </div>
-      <div id="recommendation" class="recommendation"></div>
+  <main class="app-shell">
+    <aside class="story-rail" aria-label="故事板">
+      <section class="rail-section">
+        <div class="section-heading"><h2>故事板</h2><span id="story-count"></span></div>
+        <div class="story-group"><h3>关键元素</h3><div id="element-list" class="object-list"></div></div>
+        <div class="story-group"><h3>分镜</h3><div id="shot-list" class="object-list"></div></div>
+        <div class="story-group"><h3>音频</h3><div id="audio-list" class="object-list"></div></div>
+      </section>
+      <section class="rail-section unclassified-section">
+        <div class="section-heading"><h2>未归类素材</h2><span id="unclassified-count"></span></div>
+        <div id="unclassified-list" class="object-list"></div>
+      </section>
+    </aside>
+    <section class="main-stage">
+      <div class="stage-header"><div><p id="task-label" class="eyebrow">任务</p><h1 id="selection-title">选择一个分镜</h1><p id="selection-purpose" class="muted">从故事板选择对象查看审核内容</p></div><div class="stage-actions"><button id="play-toggle" type="button" class="icon-button" title="播放或暂停">播放</button><button id="diagnostics-toggle" type="button" class="text-button">诊断信息</button></div></div>
+      <div id="preview-stage" class="preview-stage"><div id="preview-empty" class="empty-state">当前阶段尚无可播放媒体</div><div id="preview-media"></div></div>
+      <div id="preview-caption" class="preview-caption"></div>
+      <details id="diagnostics" class="diagnostics"><summary>诊断信息</summary><pre id="diagnostics-body"></pre></details>
+      <section id="review-timeline" class="timeline-panel"><div class="timeline-toolbar"><h2>审核时间线</h2><span id="timeline-source" class="muted"></span><span id="playhead-label" class="muted">00:00</span></div><div id="timeline-tracks" class="timeline-tracks"></div></section>
     </section>
-
-    <nav id="gate-tabs" class="gate-tabs" aria-label="审核阶段"></nav>
-
-    <section class="workspace">
-      <div class="evidence-pane">
-        <h2>审核证据</h2>
-        <div id="evidence-list" class="evidence-list"></div>
-      </div>
-      <aside class="decision-pane">
-        <h2>业务影响</h2>
-        <ul id="business-impacts"></ul>
-        <div id="risks" class="risks"></div>
-        <label for="decision-note">审核意见</label>
-        <textarea id="decision-note" rows="4" placeholder="填写驳回原因或修改要求"></textarea>
-        <div class="decision-actions">
-          <button type="button" class="primary" data-action="approve">通过</button>
-          <button type="button" data-action="request_changes">要求修改</button>
-          <button type="button" class="danger" data-action="reject">驳回</button>
-        </div>
-      </aside>
-    </section>
+    <aside id="decision-assistant" class="decision-rail" aria-label="流程决策助手">
+      <div class="assistant-header"><span class="eyebrow">当前阶段</span><strong id="assistant-stage">加载中</strong></div><div class="stage-progress" id="stage-progress"></div>
+      <section class="decision-card"><span class="eyebrow">现在要判断</span><h2 id="decision-question">正在读取</h2><p id="recommendation" class="recommendation"></p></section>
+      <section class="decision-card"><h3>依据</h3><div id="evidence-list" class="evidence-list"></div></section>
+      <section class="decision-card risks-card"><h3>风险与缺口</h3><div id="risks"></div></section>
+      <section class="decision-card"><h3>下一步</h3><p id="next-action" class="next-action"></p></section>
+      <div class="decision-actions"><button type="button" class="primary" data-action="approve">通过</button><button type="button" data-action="request_changes">要求修改</button><button type="button" class="danger" data-action="reject">驳回</button></div>
+      <label class="note-label" for="decision-note">审核意见</label><textarea id="decision-note" rows="3" placeholder="驳回或要求修改时填写原因"></textarea>
+    </aside>
   </main>
-
-  <dialog id="change-dialog">
-    <form id="change-form" method="dialog">
-      <header><h2>要求修改</h2><button type="button" class="icon-button" data-close aria-label="关闭">×</button></header>
-      <label for="change-type">修改类型</label>
-      <select id="change-type" name="change_type"></select>
-      <div id="change-fields"></div>
-      <label for="change-reason">业务原因</label>
-      <textarea id="change-reason" name="reason" rows="3" required></textarea>
-      <div id="impact-preview" class="impact-preview" hidden></div>
-      <footer><button type="button" data-preview>预览影响</button><button type="button" class="primary" data-confirm disabled>确认修改</button></footer>
-    </form>
-  </dialog>
-
+  <dialog id="change-dialog"><form id="change-form" method="dialog"><header><div><span class="eyebrow">结构化修改</span><h2>告诉系统怎么改</h2></div><button type="button" class="icon-button" data-close aria-label="关闭">关闭</button></header><label for="change-type">修改对象</label><select id="change-type"></select><label for="change-target">具体内容</label><select id="change-target"></select><label for="change-reason">业务原因</label><textarea id="change-reason" rows="3" required placeholder="例如：第 2 段素材未展示防水效果"></textarea><div id="impact-preview" class="impact-preview" hidden></div><footer><button type="button" data-preview>预览影响</button><button type="button" class="primary" data-confirm disabled>确认修改</button></footer></form></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="/static/review_workbench.js" defer></script>
 </body>

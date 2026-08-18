@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from remix_reference_video.review_session import ReviewSessionService
-from remix_reference_video.storage import TaskStorage, atomic_write_json, read_jsonl_records
+from remix_reference_video.storage import TaskStorage, atomic_write_json, read_json_object, read_jsonl_records
 from remix_reference_video.workbench_decision import WorkbenchConflict, WorkbenchDecisionService
 
 
@@ -47,6 +47,22 @@ class WorkbenchDecisionTests(unittest.TestCase):
             self.service.submit(session_id=self.session["session_id"], gate_id="gate1", payload=self._body(state_revision=9))
         self.assertEqual(caught.exception.current_revision, 0)
         self.assertTrue(caught.exception.refresh_path.endswith("/review"))
+
+    def test_rejection_requires_business_reason(self) -> None:
+        with self.assertRaisesRegex(WorkbenchConflict, "rejection reason"):
+            self.service.submit(session_id=self.session["session_id"], gate_id="gate1", payload=self._body(decision="reject", note=""))
+
+    def test_approval_is_blocked_by_current_workspace_risk(self) -> None:
+        self.store.update_state(lambda state: {**state, "blockers": [{"requires_user": True, "detail": "缺少关键素材"}]})
+        package_path = self.root / "gate_review_packages/gate1.json"
+        package = read_json_object(package_path)
+        package["state_revision"] = self.store.read_state()["state_revision"]
+        atomic_write_json(package_path, package)
+        session = ReviewSessionService(self.root, actor="operator-a").open("gate1")
+        identity = session["review_identity"]
+        payload = self._body(review_package_hash=identity["review_package_hash"], state_revision=identity["state_revision"], idempotency_key="blocked-approval")
+        with self.assertRaisesRegex(WorkbenchConflict, "阻塞"):
+            self.service.submit(session_id=session["session_id"], gate_id="gate1", payload=payload)
 
 
 if __name__ == "__main__": unittest.main()
