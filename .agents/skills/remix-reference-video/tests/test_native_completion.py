@@ -35,8 +35,8 @@ class NativeCompletionTests(unittest.TestCase):
             )
             self.assertEqual(registry.stage_ids(), (
                 "build-material-selection-package", "freeze-fragment-plan",
-                "validate-script-evidence", "summarize-gate3", "build-production-script",
-                "materialize-approved-broad", "voice-preflight", "build-gate4-pre-package", "generate-voice",
+                "validate-script-evidence", "summarize-gate3", "build-narrative-coherence", "build-production-script",
+                "materialize-approved-broad", "validate-visual-layout", "voice-preflight", "build-gate4-pre-package", "generate-voice",
                 "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy",
                 "validate-proxy-boundaries", "render-final", "build-gate5-package",
                 "archive-approved",

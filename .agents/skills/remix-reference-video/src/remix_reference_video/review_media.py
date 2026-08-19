@@ -9,11 +9,15 @@ import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
+from .media_layout import PRODUCTION_CANVAS, render_filter_for_media
 from .storage import atomic_write_json, read_json_object
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def build_gate3_review_media(
-    *, task_root: Path, asset_root: Path, package_path: Path
+    *, task_root: Path, asset_root: Path, package_path: Path,
+    profile: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     task = Path(task_root).resolve(strict=True)
     assets = Path(asset_root).resolve(strict=True)
@@ -24,6 +28,11 @@ def build_gate3_review_media(
     selections = package.get("selections")
     if package.get("gate_id") != "gate3_material_selection" or not isinstance(selections, list):
         raise ValueError("Gate 3 material selection package is required")
+    profile_width = int((profile or {}).get("width") or PRODUCTION_CANVAS[0])
+    profile_height = int((profile or {}).get("height") or PRODUCTION_CANVAS[1])
+    if min(profile_width, profile_height) <= 0:
+        raise ValueError("review profile dimensions must be positive")
+    review_width, review_height = profile_width // 3, profile_height // 3
     frames = task / "gate3_review_frames"
     proxies = task / "gate3_review_proxies"
     frames.mkdir(exist_ok=True)
@@ -43,20 +52,26 @@ def build_gate3_review_media(
         start, end = float(broad["start_seconds"]), float(broad["end_seconds"])
         if start < 0 or end <= start:
             raise ValueError("Gate 3 broad range is invalid")
+        overlay_policy = selection.get("overlay_policy")
+        filter_chain = render_filter_for_media(
+            suffix=source.suffix,
+            overlay_policy=overlay_policy if isinstance(overlay_policy, str) else None,
+            canvas_width=review_width,
+            canvas_height=review_height,
+        )
         frame = frames / f"{fragment_id}.jpg"
-        image = source.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+        image = source.suffix.lower() in _IMAGE_EXTS
         command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
         if not image:
             command.extend(("-ss", f"{(start + end) / 2:.6f}"))
-        command.extend(("-i", str(source), "-frames:v", "1", "-vf",
-            "scale=360:640:force_original_aspect_ratio=increase,crop=360:640", "-q:v", "2", str(frame)))
+        command.extend(("-i", str(source), "-frames:v", "1", "-vf", filter_chain, "-q:v", "2", str(frame)))
         _run(command)
         if not image:
             proxy = proxies / f"{fragment_id}.mp4"
             _run([
                 "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                 "-ss", f"{start:.6f}", "-i", str(source), "-t", f"{end - start:.6f}",
-                "-an", "-vf", "scale=360:640:force_original_aspect_ratio=increase,crop=360:640",
+                "-an", "-vf", filter_chain,
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(proxy),
             ])
             proxy_paths.append(proxy.relative_to(task).as_posix())

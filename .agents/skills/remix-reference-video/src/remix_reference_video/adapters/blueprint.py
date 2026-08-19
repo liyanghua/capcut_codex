@@ -6,6 +6,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ..narrative_coherence import NARRATIVE_CONTRACT_VERSION, _ACTIONS, _ROLES
+
 
 class BlueprintValidationError(ValueError):
     """Raised when a Blueprint draft exceeds its approved inputs."""
@@ -54,6 +56,18 @@ class BlueprintAdapter:
             text = row.get("narration", "")
             if not isinstance(text, str):
                 raise BlueprintValidationError(f"{fragment_id}.narration must be text")
+            role = row.get("narrative_role")
+            if not isinstance(role, str) or role not in _ROLES:
+                raise BlueprintValidationError(
+                    f"{fragment_id}.narrative_role must be one of {_ROLES!r}"
+                )
+            actions = self._strings(row.get("required_actions", ()), f"{fragment_id}.required_actions")
+            if not actions:
+                raise BlueprintValidationError(f"{fragment_id}.required_actions must not be empty")
+            if any(action not in _ACTIONS for action in actions):
+                raise BlueprintValidationError(
+                    f"{fragment_id}.required_actions must be within {_ACTIONS!r}"
+                )
             blocked = [claim for claim in forbidden if claim and claim in text]
             if blocked:
                 raise BlueprintValidationError(
@@ -84,6 +98,7 @@ class BlueprintAdapter:
             "fragments": fragments,
             "duration_envelope": envelope,
             "timing_lint": timing,
+            "narrative_contract_version": NARRATIVE_CONTRACT_VERSION,
             "lifecycle_status": "draft",
         }
         return {"shot_blueprint": blueprint, "content_baseline": baseline}

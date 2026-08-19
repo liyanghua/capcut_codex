@@ -46,8 +46,8 @@ _IMPACTS: dict[str, dict[str, object]] = {
     "copy": {
         "earliest_affected_gate": "gate4_pre_generation",
         "stale_gates": ["gate4_pre_generation", "gate4_post_generation", "gate4", "gate5"],
-        "stale_stages": ["voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
-        "artifacts_to_regenerate": ["production_script_candidate.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
+        "stale_stages": ["build-narrative-coherence", "build-production-script", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
+        "artifacts_to_regenerate": ["production_script_candidate.json", "narrative_coherence_report.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
         "media_actions": ["regenerate_voice", "rebuild_timeline", "rerender"],
         "requires_tts": True,
         "requires_render": True,
@@ -58,8 +58,8 @@ _IMPACTS: dict[str, dict[str, object]] = {
     "claim_scope": {
         "earliest_affected_gate": "gate2",
         "stale_gates": ["gate2", "gate3_material_selection", "gate3_evidence_closure", "gate3", "gate4_pre_generation", "gate4_post_generation", "gate4", "gate5"],
-        "stale_stages": ["compile-blueprint", "compile-mutation-plan", "lint-gate2-package", "build-coverage-authoritative", "match-assets", "build-material-selection-package", "freeze-fragment-plan", "validate-script-evidence", "summarize-gate3", "build-production-script", "materialize-approved-broad", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
-        "artifacts_to_regenerate": ["content_baseline.json", "mutation_plan.json", "coverage_report.json", "matches.json", "fragment_plan.json", "script_evidence_matrix.json", "production_script_candidate.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
+        "stale_stages": ["compile-blueprint", "compile-mutation-plan", "lint-gate2-package", "build-coverage-authoritative", "match-assets", "build-material-selection-package", "freeze-fragment-plan", "validate-script-evidence", "summarize-gate3", "build-narrative-coherence", "build-production-script", "materialize-approved-broad", "validate-visual-layout", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
+        "artifacts_to_regenerate": ["content_baseline.json", "mutation_plan.json", "coverage_report.json", "matches.json", "fragment_plan.json", "script_evidence_matrix.json", "production_script_candidate.json", "narrative_coherence_report.json", "visual_layout_report.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
         "media_actions": ["rematch_materials", "regenerate_voice", "rerender"],
         "requires_tts": True,
         "requires_render": True,
@@ -82,8 +82,8 @@ _IMPACTS: dict[str, dict[str, object]] = {
     "material": {
         "earliest_affected_gate": "gate3_material_selection",
         "stale_gates": ["gate3_material_selection", "gate3_evidence_closure", "gate3", "gate4_pre_generation", "gate4_post_generation", "gate4", "gate5"],
-        "stale_stages": ["build-material-selection-package", "freeze-fragment-plan", "validate-script-evidence", "summarize-gate3", "build-production-script", "materialize-approved-broad", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
-        "artifacts_to_regenerate": ["matches.json", "fragment_plan.json", "material_manifest.json", "script_evidence_matrix.json", "production_script_candidate.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
+        "stale_stages": ["build-material-selection-package", "freeze-fragment-plan", "validate-script-evidence", "summarize-gate3", "build-narrative-coherence", "build-production-script", "materialize-approved-broad", "validate-visual-layout", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
+        "artifacts_to_regenerate": ["matches.json", "fragment_plan.json", "material_manifest.json", "script_evidence_matrix.json", "production_script_candidate.json", "narrative_coherence_report.json", "visual_layout_report.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
         "media_actions": ["rematerialize", "regenerate_voice", "rerender"],
         "requires_tts": True,
         "requires_render": True,
@@ -119,8 +119,8 @@ _IMPACTS: dict[str, dict[str, object]] = {
     "structural": {
         "earliest_affected_gate": "gate2",
         "stale_gates": ["gate2", "gate3_material_selection", "gate3_evidence_closure", "gate3", "gate4_pre_generation", "gate4_post_generation", "gate4", "gate5"],
-        "stale_stages": ["compile-blueprint", "compile-mutation-plan", "lint-gate2-package", "build-coverage-authoritative", "match-assets", "build-material-selection-package", "freeze-fragment-plan", "validate-script-evidence", "summarize-gate3", "build-production-script", "materialize-approved-broad", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
-        "artifacts_to_regenerate": ["content_baseline.json", "mutation_plan.json"],
+        "stale_stages": ["compile-blueprint", "compile-mutation-plan", "lint-gate2-package", "build-coverage-authoritative", "match-assets", "build-material-selection-package", "freeze-fragment-plan", "validate-script-evidence", "summarize-gate3", "build-narrative-coherence", "build-production-script", "materialize-approved-broad", "validate-visual-layout", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
+        "artifacts_to_regenerate": ["content_baseline.json", "mutation_plan.json", "narrative_coherence_report.json"],
         "media_actions": [],
         "requires_tts": False,
         "requires_render": False,
@@ -131,6 +131,34 @@ _IMPACTS: dict[str, dict[str, object]] = {
 }
 _IMPACTS["range"] = copy.deepcopy(_IMPACTS["material"])
 _IMPACTS["range"]["business_explanation"] = "源范围变化会使 Gate 3 证据闭环和全部下游媒体失效。"
+
+_TERMINAL_NODES = frozenset({"archive-approved"})
+
+
+def dag_downstream_closure(start_ids: list[str], *, exclude: frozenset[str] = _TERMINAL_NODES) -> list[str]:
+    """Compute the downstream stage closure from the current production DAG.
+
+    Explicit impact lists must stay consistent with this closure; tests compare
+    the two so a DAG change cannot silently diverge from the invalidation tables.
+    """
+    from .orchestrator import default_dag
+
+    nodes = {node.node_id: node for node in default_dag()}
+    closure: list[str] = []
+    seen: set[str] = set()
+    queue: list[str] = list(start_ids)
+    while queue:
+        node_id = queue.pop(0)
+        if node_id in seen or node_id in exclude:
+            continue
+        seen.add(node_id)
+        closure.append(node_id)
+        if node_id not in nodes:
+            continue
+        for candidate in nodes.values():
+            if node_id in candidate.dependencies:
+                queue.append(candidate.node_id)
+    return closure
 
 
 def _canonical_bytes(value: object) -> bytes:
@@ -222,6 +250,15 @@ class _ChangeValidator:
         allowed = self._ids(candidate.get("lines"), "line_id")
         if not set(line_ids).issubset(allowed):
             raise ChangeConflict("copy line is not allowlisted")
+        intent = payload.get("edit_intent")
+        is_v1_task = candidate.get("contract_version") is None and candidate.get("schema_version") == "1.0"
+        if intent is not None:
+            if intent not in {"bridge", "rewrite"}:
+                raise ChangeConflict("copy edit_intent must be bridge or rewrite")
+        elif is_v1_task:
+            payload["edit_intent"] = "rewrite"
+        else:
+            raise ChangeConflict("copy edit_intent is required (bridge|rewrite)")
 
     def _validate_claim_scope(self, payload: Mapping[str, object], scope_ids: list[str]) -> None:
         added = payload.get("claim_ids_add")

@@ -13,7 +13,7 @@ class CriticalPathTests(unittest.TestCase):
     def test_parallel_roots_and_terminal_path(self):
         result = CriticalPathCollector().collect(self._metrics())
         self.assertEqual(result["measurement_status"], "measured")
-        self.assertEqual(result["seconds"], 22.0)
+        self.assertEqual(result["seconds"], 23.0)
         self.assertEqual(result["critical_path_nodes"][-1], "build-gate5-package")
 
     def test_missing_node_is_not_measured(self):

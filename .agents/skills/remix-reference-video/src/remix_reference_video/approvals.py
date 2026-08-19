@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .contracts import CANONICAL_GATE_IDS, PRODUCTION_EXECUTION_MODE
+from .narrative_coherence import NARRATIVE_CONTRACT_VERSION
+from .orchestrator import HARDENED_DAG_VERSION, LEGACY_DAG_VERSION
 from .storage import StorageError, TaskStorage, atomic_write_json, read_json_object
 from .transactions import ArtifactPromotion, TransactionManager
 
@@ -174,6 +176,17 @@ class ApprovalService:
                 },
             },
         }
+        if gate_id == "gate2" and decision["decision"] == "approved":
+            baseline_hash = package["input_hashes"].get("content_baseline.json")
+            baseline = read_json_object(self.root / "content_baseline.json")
+            if not self._is_sha256(baseline_hash):
+                raise ApprovalError("Gate 2 package must bind content_baseline.json")
+            state_changes["production_dag_version"] = (
+                HARDENED_DAG_VERSION
+                if baseline.get("narrative_contract_version") == NARRATIVE_CONTRACT_VERSION
+                else LEGACY_DAG_VERSION
+            )
+            state_changes["production_dag_input_sha256"] = baseline_hash
         promotions: tuple[ArtifactPromotion, ...] = ()
         if gate_id == "gate4_pre_generation" and decision["decision"] == "approved":
             promotion, artifact = self._stage_approved_script(record, decision, package)

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import CommandResult, ExecutionPlan, PlanValidationError, StagePlan
-from .orchestrator import ProductionOrchestrator, StageAdapter, default_dag
+from .orchestrator import ProductionOrchestrator, StageAdapter, dag_for_task, default_dag
 from .review_view import ReviewViewBuilder
 from .stage_input_validator import StageInputValidator
 from .storage import (
@@ -1178,12 +1178,12 @@ class FastPathRunner:
 class ProductionRunner:
     """Run registered native adapters through the authoritative production DAG."""
 
-    def __init__(self, task_root: Path, adapters: tuple[StageAdapter, ...]) -> None:
+    def __init__(self, task_root: Path, adapters: tuple[StageAdapter, ...], dag: object | None = None) -> None:
         self.task_root = Path(task_root).resolve(strict=True)
         self.adapters = {adapter.execution_stage_id: adapter for adapter in adapters}
         if len(self.adapters) != len(adapters):
             raise StorageError("production adapter stage ids must be unique")
-        self.orchestrator = ProductionOrchestrator(default_dag())
+        self.orchestrator = ProductionOrchestrator(tuple(dag) if dag is not None else default_dag())
 
     @classmethod
     def from_registry(cls, task_root: Path, registry: object) -> "ProductionRunner":
@@ -1192,7 +1192,7 @@ class ProductionRunner:
         adapters = getattr(registry, "adapters", None)
         if not callable(adapters):
             raise StorageError("native registry must expose adapters()")
-        return cls(task_root, tuple(adapters()))
+        return cls(task_root, tuple(adapters()), dag=dag_for_task(task_root))
 
     def initialize(self, *, run_id: str | None = None) -> dict[str, Any]:
         store = TaskStorage(self.task_root)

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:narrative-coherence-report",
+  "title": "Narrative Coherence Report",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "status", "narrative_contract_version", "continuity_lexicon_version", "fragments", "checks", "blocked_fragment_ids", "allowed_resolutions"],
+  "properties": {
+    "artifact_type": {"const": "narrative_coherence_report"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:narrative-coherence-report"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["passed", "blocked", "manual_review"]},
+    "narrative_contract_version": {"const": "narrative_contract_v1"},
+    "continuity_lexicon_version": {"const": "continuity_lexicon_v1"},
+    "fragments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fragment_id", "narrative_role", "coherence_status"],
+        "properties": {
+          "fragment_id": {"type": "string", "minLength": 1},
+          "narrative_role": {"type": "string", "minLength": 1},
+          "required_actions": {"type": "array", "items": {"type": "string"}},
+          "continuity_before": {"type": ["string", "null"]},
+          "continuity_after": {"type": ["string", "null"]},
+          "approved_claim_ids": {"type": "array", "items": {"type": "string"}},
+          "evidence_row_ref": {"type": ["string", "null"]},
+          "coherence_status": {"enum": ["passed", "blocked", "manual_review"]},
+          "blocked_reasons": {"type": "array", "items": {"type": "string"}},
+          "business_explanation": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "checks": {
+      "type": "object",
+      "required": ["opening_context", "transition_coverage", "claim_density", "closing"],
+      "properties": {
+        "opening_context": {"enum": ["passed", "blocked", "manual_review"]},
+        "transition_coverage": {"enum": ["passed", "blocked", "manual_review"]},
+        "claim_density": {"enum": ["passed", "blocked", "manual_review"]},
+        "closing": {"enum": ["passed", "blocked", "manual_review"]}
+      },
+      "additionalProperties": false
+    },
+    "blocked_fragment_ids": {"type": "array", "items": {"type": "string"}},
+    "allowed_resolutions": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

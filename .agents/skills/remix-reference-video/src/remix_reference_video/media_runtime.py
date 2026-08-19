@@ -8,7 +8,10 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
+from .media_layout import render_filter_for_media
 from .storage import read_json_object
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 class MediaRuntimeError(RuntimeError):
@@ -85,6 +88,16 @@ class FFmpegRenderer:
         duration = float(timeline.get("duration_seconds", 0))
         if min(width, height, fps) <= 0 or duration <= 0:
             raise MediaRuntimeError("render profile and duration are invalid")
+        overlay_policy: dict[str, str] = {}
+        plan_path = task_root / "fragment_plan.json"
+        if plan_path.is_file() and not plan_path.is_symlink():
+            plan_rows = read_json_object(plan_path).get("fragments", [])
+            if isinstance(plan_rows, list):
+                overlay_policy = {
+                    str(row.get("fragment_id")): str(row.get("overlay_policy", ""))
+                    for row in plan_rows
+                    if isinstance(row, Mapping) and isinstance(row.get("fragment_id"), str)
+                }
         voice_manifest = read_json_object(task_root / "voice" / "voice_manifest.json")
         final_voice = voice_manifest.get("final_voice")
         if not isinstance(final_voice, Mapping) or not isinstance(final_voice.get("path"), str):
@@ -108,15 +121,20 @@ class FFmpegRenderer:
             )
             if fragment_duration <= 0:
                 raise MediaRuntimeError(f"timeline duration is invalid for {fragment_id}")
-            if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+            if path.suffix.lower() in _IMAGE_EXTS:
                 inputs.extend(("-loop", "1", "-t", f"{fragment_duration:.6f}", "-i", str(path)))
             else:
                 start = float(raw.get("source_start_seconds", 0))
                 inputs.extend(("-ss", f"{start:.6f}", "-t", f"{fragment_duration:.6f}", "-i", str(path)))
             label = f"v{index}"
+            filter_chain = render_filter_for_media(
+                suffix=path.suffix,
+                overlay_policy=overlay_policy.get(fragment_id),
+                canvas_width=width,
+                canvas_height=height,
+            )
             filters.append(
-                f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height},fps={fps},trim=duration={fragment_duration:.6f},"
+                f"[{index}:v]{filter_chain},fps={fps},trim=duration={fragment_duration:.6f},"
                 f"setpts=PTS-STARTPTS,format=yuv420p[{label}]"
             )
             labels.append(f"[{label}]")

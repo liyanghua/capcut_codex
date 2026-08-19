@@ -186,7 +186,7 @@ class NativeRegistryTests(unittest.TestCase):
                 "skill_version": "2.0.0-alpha.1", "stage_id": "compile-blueprint",
                 "producer": "fixture", "created_at": "2026-08-16T10:00:00Z",
                 "lifecycle_status": "awaiting_user", "input_hashes": {},
-                "payload": {"target_fragments": [{"fragment_id": "fragment01", "claim_ids": ["clean"], "narration": "擦净"}]}
+                "payload": {"target_fragments": [{"fragment_id": "fragment01", "claim_ids": ["clean"], "narration": "擦净", "narrative_role": "功能证明", "required_actions": ["demonstrate_feature"]}]}
             }), encoding="utf-8")
             registry = register_planning_adapters(
                 NativeAdapterRegistry(root),

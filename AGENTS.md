@@ -45,6 +45,8 @@ work/
     matches.json
     fragment_plan.json
     script_evidence_matrix.json
+    narrative_coherence_report.json
+    visual_layout_report.json
     production_script_candidate.json
     approved_production_script.json
     voice_preflight.json
@@ -105,7 +107,7 @@ work/
 - `material/fragmentNN/` 是审校通过后的生产素材来源。
 - 使用生成配音时，以每段真实完成语音时长作为画面和字幕时长依据；真实时长写入 `voice/` 报告和 `reconstruction_timeline.json`，不回写参考事实层。
 - `recipe.json` 是 Gate 1 后的参考视频事实层；V2 不因配音或渲染而原地改写它。V1 兼容指针若存在，必须作为派生字段单独校验，不能使 Gate 1 重新失效。
-- `pipeline_state.json`、`recipe.json`、`shot_blueprint.json`、`content_baseline.json`、`mutation_plan.json`、`coverage_report.json`、`matches.json`、`fragment_plan.json`、`script_evidence_matrix.json`、`voice_preflight.json`、`approved_production_script.json` 和 `reconstruction_timeline.json` 是核心自动化流程的机器可读依据；审批唯一权威是 `pipeline_state.json`。
+- `pipeline_state.json`、`recipe.json`、`shot_blueprint.json`、`content_baseline.json`、`mutation_plan.json`、`coverage_report.json`、`matches.json`、`fragment_plan.json`、`script_evidence_matrix.json`、`narrative_coherence_report.json`、`visual_layout_report.json`、`voice_preflight.json`、`approved_production_script.json` 和 `reconstruction_timeline.json` 是核心自动化流程的机器可读依据；审批唯一权威是 `pipeline_state.json`。
 - V2 任务产物使用五字段 envelope：`artifact_type`、`schema_id`、`schema_version`、`contract_version`、`skill_version`。canonical registry 位于 `.agents/skills/remix-reference-video/schemas/v2-alpha.registry.schema.json`；历史 V1 文件保持原样，不批量回写。
 
 ## 流程
@@ -119,7 +121,7 @@ Performance-proven Video → Blueprint → Controlled Mutation → Retrieval →
 3. Blueprint：根据参考结构、Brief 和覆盖预判生成 `shot_blueprint.json`、`content_baseline.json` 和可读稿，准备 Gate 2。
 4. Controlled Mutation：生成 `mutation_plan.json`，记录保留、替换、改写、删并段请求和已批准 fallback；Gate 2 原子批准内容基线与变更包。Gate 3 证据闭环后再编译最终生产脚本候选，Gate 4 生成前才提升为批准脚本。
 5. Retrieval：读取只读 `assets/`，完成覆盖分析、资格门禁、视觉匹配、全局排程和逐句证据校验。Gate 3 拆为选材确认与证据闭环两个子状态；汇总通过后才形成不可变宽范围 `fragment_plan.json`。
-6. Reconstruction：复制/导出 Gate 3 批准宽范围到 `material/`，生成 `material_manifest.json`；先以 Gate 3 画面预算、候选文案和拟用语速生成 `voice_preflight.json`，通过后才生成 Gate 4 生成前审核包。Gate 4 生成前批准后调用 TTS，以实测时长再次校验预算并生成 `reconstruction_timeline.json` 和 SRT；先完成 Gate 4 生成后听审，再做代理/边界检查和正式成片，最后进入 Gate 5。
+6. Reconstruction：复制/导出 Gate 3 批准宽范围到 `material/`，生成 `material_manifest.json`；新任务（冻结内容基线携带 `narrative_contract_v1`）在 Gate 3 汇总后先执行机器质量节点 `build-narrative-coherence` 与 `validate-visual-layout`，生成两份 hash 绑定报告，任一 `blocked` 不得进入 `voice-preflight`、TTS 或媒体渲染；在飞旧契约任务按旧 DAG 续跑，不得静默变轨。先以 Gate 3 画面预算、候选文案和拟用语速生成 `voice_preflight.json`，通过后才生成 Gate 4 生成前审核包。Gate 4 生成前批准后调用 TTS，以实测时长再次校验预算并生成 `reconstruction_timeline.json` 和 SRT；先完成 Gate 4 生成后听审，再做代理/边界检查和正式成片，最后进入 Gate 5。
 
 V1/V2 边界：已经开始的 V1 任务按创建时契约续跑，不自动取得 V2 Gate 授权。G-A 已通过，Track B 已合并主干；在 G-B 和监督运营试用通过前，普通 V2 production、共享生产缓存和一线发布仍关闭。新 V2 case 先完成 Stage 0 冻结输入，再通过隔离 `gb-pair` 逐 Gate 运行；配对不是普通发布，不进入 `final/`，也不能复用其他任务审批。旧任务迁移必须生成映射、输入哈希、失效 Gate 和重新确认清单，不能用旧批准替代新子状态。
 

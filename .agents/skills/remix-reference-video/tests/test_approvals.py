@@ -11,6 +11,7 @@ from pathlib import Path
 
 from remix_reference_video.approvals import ApprovalError, ApprovalService
 from remix_reference_video.cli import main
+from remix_reference_video.orchestrator import dag_for_task
 from remix_reference_video.storage import TaskStorage, atomic_write_json
 
 
@@ -80,6 +81,12 @@ class ApprovalServiceTests(unittest.TestCase):
         return path
 
     def approve(self, gate: str = "gate1", **package_overrides: object) -> dict[str, object]:
+        if gate == "gate2" and "input_hashes" not in package_overrides:
+            baseline = self.root / "content_baseline.json"
+            atomic_write_json(baseline, {"artifact_type": "content_baseline"})
+            package_overrides["input_hashes"] = {
+                "content_baseline.json": self.sha256(baseline)
+            }
         _, digest = self.write_package(gate, **package_overrides)
         return self.service.approve(
             gate_id=gate,
@@ -137,6 +144,19 @@ class ApprovalServiceTests(unittest.TestCase):
         stages = self.store.read_state()["stages"]
         self.assertEqual(stages["reference_split"]["status"], "approved")
         self.assertEqual(stages["content_blueprint"]["status"], "approved")
+
+    def test_gate2_approval_freezes_quality_dag_and_baseline_hash(self) -> None:
+        self.approve("gate1")
+        baseline = self.root / "content_baseline.json"
+        atomic_write_json(baseline, {"narrative_contract_version": "narrative_contract_v1"})
+        self.approve("gate2", input_hashes={"content_baseline.json": self.sha256(baseline)})
+
+        state = self.store.read_state()
+        self.assertEqual(state["production_dag_version"], "quality_hardening_v1")
+        self.assertEqual(state["production_dag_input_sha256"], self.sha256(baseline))
+        atomic_write_json(baseline, {"narrative_contract_version": "legacy"})
+        self.assertIn("build-narrative-coherence", [node.node_id for node in dag_for_task(self.root)])
+
 
     def test_reconcile_business_stages_repairs_existing_approved_state(self) -> None:
         self.approve("gate1")

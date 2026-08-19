@@ -28,6 +28,8 @@ class _FixtureAdapter:
 
     def declared_outputs(self) -> tuple[Path, ...]:
         outputs = [self.output]
+        if self.execution_stage_id == "compile-blueprint":
+            outputs.append(self.task / "content_baseline.json")
         if self.execution_stage_id == "build-production-script":
             outputs.append(self.task / "production_script_candidate.json")
         if self.stop_gate:
@@ -50,10 +52,20 @@ class _FixtureAdapter:
             (self.task / "production_script_candidate.json").write_text(
                 json.dumps({"script": "fixture"}), encoding="utf-8"
             )
+        if self.execution_stage_id == "compile-blueprint":
+            (self.task / "content_baseline.json").write_text(
+                json.dumps({"artifact_type": "content_baseline"}), encoding="utf-8"
+            )
         if self.stop_gate:
             package = self.task / "gate_review_packages" / f"{self.stop_gate}.json"
             package.parent.mkdir(parents=True, exist_ok=True)
-            package.write_text(json.dumps({"gate_id": self.stop_gate}), encoding="utf-8")
+            payload: dict[str, object] = {"gate_id": self.stop_gate}
+            if self.stop_gate == "gate2":
+                baseline = self.task / "content_baseline.json"
+                payload["input_hashes"] = {
+                    "content_baseline.json": hashlib.sha256(baseline.read_bytes()).hexdigest()
+                }
+            package.write_text(json.dumps(payload), encoding="utf-8")
         return {"status": "succeeded", "stop_gate": self.stop_gate}
 
 

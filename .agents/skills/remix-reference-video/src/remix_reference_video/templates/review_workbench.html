@@ -6,15 +6,15 @@
   <title>视频审核工作区</title>
   <link rel="stylesheet" href="/static/review_workbench.css">
   <style>
-    .preview-stage{height:clamp(360px,56vh,620px);min-height:360px}
-    .preview-stage video{display:block;height:clamp(360px,56vh,620px);max-height:clamp(360px,56vh,620px);width:auto;max-width:100%;aspect-ratio:9/16;object-fit:contain}
+    .preview-stage{height:clamp(280px,56vh,620px);min-height:280px}
+    .preview-stage video{display:block;height:auto;max-height:100%;width:auto;max-width:100%;aspect-ratio:9/16;object-fit:contain}
     .preview-stage img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
   </style>
 </head>
 <body data-run-id="__RUN_ID__">
   <header class="topbar">
     <div class="brand"><strong>视频审核工作区</strong><span id="run-label"></span></div>
-    <div class="top-meta"><span id="business-stage">加载中</span><span id="progress-label">0%</span><span id="connection-status" class="status">连接中</span></div>
+    <div class="top-meta"><span id="business-stage">加载中</span><span id="substep-label" class="muted"></span><span id="progress-label">0%</span><span id="connection-status" class="status">连接中</span></div>
   </header>
   <main class="app-shell">
     <aside class="story-rail" aria-label="故事板">
@@ -29,19 +29,49 @@
         <div id="unclassified-list" class="object-list"></div>
       </section>
     </aside>
+
     <section class="main-stage">
-      <div class="stage-header"><div><p id="task-label" class="eyebrow">任务</p><h1 id="selection-title">选择一个分镜</h1><p id="selection-purpose" class="muted">从故事板选择对象查看审核内容</p></div><div class="stage-actions"><button id="play-toggle" type="button" class="icon-button" title="播放或暂停">播放</button><button id="diagnostics-toggle" type="button" class="text-button">诊断信息</button></div></div>
+      <div class="stage-header">
+        <div>
+          <p id="task-label" class="eyebrow">任务</p>
+          <h1 id="preview-title">阶段主预览</h1>
+          <p id="preview-note" class="muted">中央固定显示当前阶段主媒体，左侧选择只定位时间线并显示只读详情</p>
+        </div>
+        <div class="stage-actions">
+          <button id="play-toggle" type="button" class="icon-button" title="播放或暂停">播放</button>
+          <button id="diagnostics-toggle" type="button" class="text-button">诊断信息</button>
+        </div>
+      </div>
       <div id="preview-stage" class="preview-stage"><div id="preview-empty" class="empty-state">当前阶段尚无可播放媒体</div><div id="preview-media"></div></div>
       <div id="preview-caption" class="preview-caption"></div>
       <details id="diagnostics" class="diagnostics"><summary>诊断信息</summary><pre id="diagnostics-body"></pre></details>
-      <section id="review-timeline" class="timeline-panel"><div class="timeline-toolbar"><h2>审核时间线</h2><span id="timeline-source" class="muted"></span><span id="playhead-label" class="muted">00:00</span></div><div id="timeline-tracks" class="timeline-tracks"></div></section>
+
+      <section id="object-detail" class="object-detail" hidden>
+        <div class="section-heading"><h2 id="detail-heading">对象详情</h2><button type="button" class="text-button" id="detail-close">关闭</button></div>
+        <div class="detail-body"><div id="detail-media" class="detail-media"></div><dl id="detail-fields" class="detail-fields"></dl></div>
+      </section>
+
+      <section id="review-timeline" class="timeline-panel">
+        <div class="timeline-toolbar"><h2>审核时间线</h2><span id="timeline-source" class="muted"></span><span id="playhead-label" class="muted">00:00</span></div>
+        <div class="timeline-canvas" id="timeline-canvas">
+          <div id="timeline-ruler" class="timeline-ruler"></div>
+          <div id="timeline-tracks" class="timeline-tracks"></div>
+          <div id="timeline-playhead" class="timeline-playhead" hidden></div>
+        </div>
+      </section>
     </section>
+
     <aside id="decision-assistant" class="decision-rail" aria-label="流程决策助手">
-      <div class="assistant-header"><span class="eyebrow">当前阶段</span><strong id="assistant-stage">加载中</strong></div><div class="stage-progress" id="stage-progress"></div>
-      <section class="decision-card"><span class="eyebrow">现在要判断</span><h2 id="decision-question">正在读取</h2><p id="recommendation" class="recommendation"></p></section>
-      <section class="decision-card"><h3>依据</h3><div id="evidence-list" class="evidence-list"></div></section>
-      <section class="decision-card risks-card"><h3>风险与缺口</h3><div id="risks"></div></section>
-      <section class="decision-card"><h3>下一步</h3><p id="next-action" class="next-action"></p></section>
+      <div class="assistant-header"><span class="eyebrow">流程决策助手</span><strong id="assistant-stage">加载中</strong></div>
+      <ol id="stage-stepper" class="stage-stepper"></ol>
+      <div id="stage-cards">
+        <section class="decision-card"><span class="eyebrow">现在要判断</span><h2 id="decision-question">正在读取</h2><p id="recommendation" class="recommendation"></p></section>
+        <section class="decision-card"><h3>依据</h3><div id="evidence-list" class="evidence-list"></div></section>
+        <section class="decision-card" id="stage-content-card" hidden><h3>阶段内容</h3><div id="stage-content"></div></section>
+        <section class="decision-card" id="quality-card" hidden><h3>质量检查</h3><div id="quality-checks"></div></section>
+        <section class="decision-card risks-card"><h3>风险与缺口</h3><div id="risks"></div></section>
+        <section class="decision-card"><h3>下一步</h3><p id="next-action" class="next-action"></p></section>
+      </div>
       <div class="decision-actions"><button type="button" class="primary" data-action="approve">通过</button><button type="button" data-action="request_changes">要求修改</button><button type="button" class="danger" data-action="reject">驳回</button></div>
       <label class="note-label" for="decision-note">审核意见</label><textarea id="decision-note" rows="3" placeholder="驳回或要求修改时填写原因"></textarea>
     </aside>

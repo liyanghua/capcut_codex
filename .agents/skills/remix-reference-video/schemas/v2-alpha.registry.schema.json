@@ -64,7 +64,9 @@
         "process_assessment",
         "gate_review_view",
         "gate_review_sheet",
-        "workbench_workspace_view"
+        "workbench_workspace_view",
+        "narrative_coherence_report",
+        "visual_layout_report"
       ]
     },
     "schema_id": {
@@ -107,7 +109,9 @@
     {"properties":{"artifact_type":{"const":"process_assessment"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:process-assessment"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"gate_review_view"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-view"}},"required":["artifact_type","schema_id"]},
     {"properties":{"artifact_type":{"const":"gate_review_sheet"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:gate-review-sheet"}},"required":["artifact_type","schema_id"]},
-    {"properties":{"artifact_type":{"const":"workbench_workspace_view"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:workbench-workspace-view"}},"required":["artifact_type","schema_id"]}
+    {"properties":{"artifact_type":{"const":"workbench_workspace_view"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:workbench-workspace-view"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"narrative_coherence_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:narrative-coherence-report"}},"required":["artifact_type","schema_id"]},
+    {"properties":{"artifact_type":{"const":"visual_layout_report"},"schema_id":{"const":"urn:capcut:remix-reference-video:artifact:visual-layout-report"}},"required":["artifact_type","schema_id"]}
   ],
   "additionalProperties": true,
   "x-artifacts": [
@@ -141,7 +145,9 @@
     {"artifact_type":"process_assessment","schema_id":"urn:capcut:remix-reference-video:artifact:process-assessment","path":"measurements/<snapshot_id>/process_assessment.json","format":"json","status":"active","track":"B","schema_path":"schemas/process-assessment.schema.json","activation":"after_g_a"},
     {"artifact_type":"gate_review_view","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-view","path":"gate_review_packages/<gate_id>.review/gate_review_view.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-view.schema.json","activation":"after_g_a"},
     {"artifact_type":"gate_review_sheet","schema_id":"urn:capcut:remix-reference-video:artifact:gate-review-sheet","path":"gate_review_packages/<gate_id>.review/gate_review_sheet.json","format":"json","status":"active","track":"B","schema_path":"schemas/gate-review-sheet.schema.json","activation":"after_g_a"},
-    {"artifact_type":"workbench_workspace_view","schema_id":"urn:capcut:remix-reference-video:artifact:workbench-workspace-view","path":"derived/workbench_workspace_view.json","format":"json","status":"derived_review_only","track":"B","schema_path":"schemas/workbench-workspace-view.schema.json","activation":"after_g_a","production_state_authority":false}
+    {"artifact_type":"workbench_workspace_view","schema_id":"urn:capcut:remix-reference-video:artifact:workbench-workspace-view","path":"derived/workbench_workspace_view.json","format":"json","status":"derived_review_only","track":"B","schema_path":"schemas/workbench-workspace-view.schema.json","activation":"after_g_a","production_state_authority":false},
+    {"artifact_type":"narrative_coherence_report","schema_id":"urn:capcut:remix-reference-video:artifact:narrative-coherence-report","path":"narrative_coherence_report.json","format":"json","status":"active","track":"B","schema_path":"schemas/narrative-coherence-report.schema.json","activation":"after_g_a","production_state_authority":false},
+    {"artifact_type":"visual_layout_report","schema_id":"urn:capcut:remix-reference-video:artifact:visual-layout-report","path":"visual_layout_report.json","format":"json","status":"active","track":"B","schema_path":"schemas/visual-layout-report.schema.json","activation":"after_g_a","production_state_authority":false}
   ],
   "x-planned-artifacts": [
     {"artifact_type":"quality_scorecard","status":"planned_track_c","activation":"after_g_b"}

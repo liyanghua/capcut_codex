@@ -55,6 +55,8 @@ class BlueprintMutationAdapterTests(unittest.TestCase):
                 "fragment_id": "fragment01",
                 "reference_shot_ids": ["shot_001"],
                 "narrative_function": "proof",
+                "narrative_role": "功能证明",
+                "required_actions": ["demonstrate_feature"],
                 "claim_ids": ["clean"],
                 "narration": "污渍可以擦净",
             }

@@ -124,6 +124,16 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py production-audi
 
 Gate 3 必须同时通过素材选择和证据闭环；Gate 4 必须先生成前批准，再真实 TTS，最后生成后听审。配音实际时长超出 Gate 3 宽范围时，必须返回受影响 Gate，不得变速或冻结尾帧补齐。
 
+
+## 质量加固节点（V2 新任务）
+
+`narrative_contract_v1` 只作用于冻结 Gate 2 内容基线携带该字段的新任务；在飞旧契约任务按旧 DAG 续跑（设计 §4.3），不会静默变轨。
+
+- `build-narrative-coherence`（summarize-gate3 之后）：由冻结基线叙事元数据 + `continuity_lexicon_v1` 生成 `narrative_coherence_report.json`；`blocked`/`manual_review` 时阻止 `build-production-script`，并通过 Gate 4 生成前审核包暴露缺口。
+- `validate-visual-layout`（materialize-approved-broad 之后）：按 `visual_layout_policy_v1` 生成 `visual_layout_report.json`。图片一律 `contain`、`crop_pixels=0`、放大不超过 `2.0x`；带源文字的视频仅在 overlay policy 为 `retain_source_text` 时 `contain`。`blocked` 时阻止 `voice-preflight`。
+- 两份报告都是机器产物：`lifecycle_status` 只允许 `ready|stale`，不允许携带 Gate approval 字段；schema 注册在 `schemas/v2-alpha.registry.schema.json`。
+- V2 文案修改请求必须携带 `edit_intent=bridge|rewrite`；`merge` 只属于结构修改并返回 Gate 2。V1 任务缺失 intent 由兼容层归一为 `rewrite`。
+
 ## 本机审核工作台
 
 P0b 提供 localhost-only 七 Gate 审核台。它只服务显式登记的冻结 `gb-pair` cold/hot run，不会按目录名猜测任务，也不会解除普通 V2 production、共享缓存、归档或发布锁。
@@ -207,6 +217,6 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-resum
 
 ## 产物位置
 
-每次任务均在 `work/YYYY-MM-DD[-slug]/` 下保存。关键产物包括 `pipeline_state.json`、`recipe.json`、`shot_blueprint.json`、`content_baseline.json`、`mutation_plan.json`、`matches.json`、`fragment_plan.json`、`voice_preflight.json`、`reconstruction_timeline.json`、`captions.srt`、`remix.mp4` 和 Gate 5 校验报告。用户确认 Gate 5 后，普通任务才可归档到 `final/`；隔离 pilot 永远留在 `work/`。
+每次任务均在 `work/YYYY-MM-DD[-slug]/` 下保存。关键产物包括 `pipeline_state.json`、`recipe.json`、`shot_blueprint.json`、`content_baseline.json`、`mutation_plan.json`、`matches.json`、`fragment_plan.json`、`narrative_coherence_report.json`、`visual_layout_report.json`、`voice_preflight.json`、`reconstruction_timeline.json`、`captions.srt`、`remix.mp4` 和 Gate 5 校验报告。用户确认 Gate 5 后，普通任务才可归档到 `final/`；隔离 pilot 永远留在 `work/`。
 
 完整契约和阶段说明见同目录 `references/`、项目根目录 `AGENTS.md` 与 `docs/remix-production-backend-implementation-status.md`。

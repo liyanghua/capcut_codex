@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:visual-layout-report",
+  "title": "Visual Layout And Readability Report",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "status", "layout_policy_version", "canvas", "fragments", "blocked_fragment_ids", "allowed_resolutions"],
+  "properties": {
+    "artifact_type": {"const": "visual_layout_report"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:visual-layout-report"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["passed", "blocked", "manual_review"]},
+    "layout_policy_version": {"const": "visual_layout_policy_v1"},
+    "canvas": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {"width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1}},
+      "additionalProperties": false
+    },
+    "fragments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fragment_id", "source_width", "source_height", "content_rect", "scale_factor", "crop_pixels", "overlay_policy", "readability_status", "suggestion"],
+        "properties": {
+          "fragment_id": {"type": "string", "minLength": 1},
+          "source_width": {"type": ["integer", "null"], "minimum": 1},
+          "source_height": {"type": ["integer", "null"], "minimum": 1},
+          "content_rect": {
+            "type": "object",
+            "required": ["x", "y", "w", "h"],
+            "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "w": {"type": "number", "minimum": 0}, "h": {"type": "number", "minimum": 0}},
+            "additionalProperties": false
+          },
+          "scale_factor": {"type": "number", "minimum": 0},
+          "crop_pixels": {"type": "integer", "minimum": 0},
+          "overlay_policy": {"enum": ["contain", "none"]},
+          "readability_status": {"enum": ["passed", "blocked", "manual_review"]},
+          "suggestion": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "blocked_fragment_ids": {"type": "array", "items": {"type": "string"}},
+    "allowed_resolutions": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

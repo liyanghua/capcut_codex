@@ -14,9 +14,11 @@ from .adapters.render import RenderAdapter
 from .adapters.retrieval import RetrievalAdapter
 from .adapters.script_compile import ProductionScriptCompiler
 from .artifact_validator import ArtifactValidator
+from .narrative_coherence import NARRATIVE_CONTRACT_VERSION, NarrativeCoherenceBuilder
 from .native_registry import NativeAdapterRegistry, NativeStageAdapter
 from .storage import StorageError, TaskStorage, atomic_write_json, read_json_object
 from .timeline import TimelineBuilder
+from .visual_layout import VisualLayoutBuilder
 from .voice import VoiceGenerator, VoiceProvider
 from .voice_preflight import VoicePreflight
 
@@ -65,10 +67,23 @@ def register_completion_adapters(
     candidate = root / "material_selection_candidate.json"
     matches = root / "matches.json"
     baseline = root / "content_baseline.json"
+    blueprint = root / "shot_blueprint.json"
     mutation = root / "mutation_plan.json"
     fragment_plan = _fragment_plan_path(root)
     evidence = root / "script_evidence_matrix.json"
+    narrative_report = root / "narrative_coherence_report.json"
+    visual_report = root / "visual_layout_report.json"
+    asset_profiles = root / "asset_profiles.json"
     script_candidate = root / "production_script_candidate.json"
+    baseline_contract = None
+    if baseline.is_file() and not baseline.is_symlink():
+        try:
+            baseline_contract = read_json_object(baseline).get("narrative_contract_version")
+        except (OSError, StorageError):
+            baseline_contract = None
+    script_inputs: tuple[Path, ...] = (baseline, mutation, evidence, state)
+    if baseline_contract == NARRATIVE_CONTRACT_VERSION:
+        script_inputs = (baseline, mutation, evidence, narrative_report, state)
     material = root / "material_manifest.json"
     approved_script = _approved_script_path(root)
     voice_preflight = root / "voice_preflight.json"
@@ -106,10 +121,17 @@ def register_completion_adapters(
         execute_fn=lambda: {"status": Gate3Adapter.summarize_gate3(_gates(root))},
     ))
     registry.register(NativeStageAdapter(
+        root, execution_stage_id="build-narrative-coherence",
+        implementation_version="narrative-coherence-native-v1",
+        required_inputs=(baseline, mutation, blueprint, evidence, state),
+        declared_outputs=(narrative_report,),
+        execute_fn=lambda: _run_narrative_coherence(root, baseline, mutation, blueprint, evidence, narrative_report),
+    ))
+    registry.register(NativeStageAdapter(
         root, execution_stage_id="build-production-script",
-        implementation_version="script-compile-native-v1",
-        required_inputs=(baseline, mutation, evidence, state), declared_outputs=(script_candidate,),
-        execute_fn=lambda: _compile_script(root, baseline, mutation, evidence),
+        implementation_version="script-compile-native-v2",
+        required_inputs=script_inputs, declared_outputs=(script_candidate,),
+        execute_fn=lambda: _compile_script(root, baseline, mutation, evidence, narrative_report),
     ))
     registry.register(NativeStageAdapter(
         root, execution_stage_id="materialize-approved-broad",
@@ -118,6 +140,13 @@ def register_completion_adapters(
         execute_fn=lambda: ReconstructionAdapter(root, assets).materialize_approved_broad(
             fragment_plan_path=fragment_plan
         ),
+    ))
+    registry.register(NativeStageAdapter(
+        root, execution_stage_id="validate-visual-layout",
+        implementation_version="visual-layout-native-v1",
+        required_inputs=(fragment_plan, asset_profiles, material, state),
+        declared_outputs=(visual_report,),
+        execute_fn=lambda: _run_visual_layout(root, fragment_plan, asset_profiles, material, visual_report),
     ))
     gate4_pre = root / "gate_review_packages" / "gate4_pre_generation.json"
     registry.register(NativeStageAdapter(
@@ -290,11 +319,81 @@ def _evidence_package(root: Path, baseline: Path, plan: Path, output: Path, payl
     return {"script_evidence_matrix": matrix, "gate3_evidence_closure": package}
 
 
-def _compile_script(root: Path, baseline: Path, mutation: Path, evidence: Path) -> Mapping[str, object]:
+def _compile_script(root: Path, baseline: Path, mutation: Path, evidence: Path, narrative: Path) -> Mapping[str, object]:
+    source = read_json_object(baseline)
+    legacy_task = source.get("narrative_contract_version") != NARRATIVE_CONTRACT_VERSION
     return ProductionScriptCompiler().compile(
         content_baseline_path=baseline, mutation_plan_path=mutation,
-        evidence_matrix_path=evidence, evidence_approval_record=_decision(root, "gate3_evidence_closure")
+        evidence_matrix_path=evidence, evidence_approval_record=_decision(root, "gate3_evidence_closure"),
+        narrative_report_path=None if legacy_task else narrative,
     )
+
+
+def _run_narrative_coherence(
+    root: Path, baseline: Path, mutation: Path, blueprint: Path, evidence: Path, output: Path
+) -> Mapping[str, object]:
+    report = NarrativeCoherenceBuilder().build(
+        content_baseline_path=baseline, mutation_plan_path=mutation,
+        shot_blueprint_path=blueprint, evidence_matrix_path=evidence,
+    )
+    atomic_write_json(output, report)
+    validation = ArtifactValidator(root).validate_quality_report(output)
+    if not validation.valid:
+        raise StorageError("narrative report is invalid: " + "; ".join(validation.errors))
+    if report["status"] == "passed":
+        return {"narrative_status": "passed"}
+    state = _state(root)
+    return {
+        "narrative_status": report["status"],
+        "state_changes": {
+            "gate_status": {
+                **dict(state.get("gate_status", {})),
+                "gate4_pre_generation": "blocked",
+            },
+            "blockers": [
+                *list(state.get("blockers", [])),
+                {
+                    "category": "narrative_coherence_blocked",
+                    "stage_id": "build-narrative-coherence",
+                    "fragment_ids": report["blocked_fragment_ids"],
+                    "allowed_resolutions": report["allowed_resolutions"],
+                },
+            ],
+        },
+    }
+
+
+def _run_visual_layout(
+    root: Path, plan: Path, profiles: Path, manifest: Path, output: Path
+) -> Mapping[str, object]:
+    report = VisualLayoutBuilder().build(
+        fragment_plan_path=plan, asset_profiles_path=profiles, material_manifest_path=manifest,
+    )
+    atomic_write_json(output, report)
+    validation = ArtifactValidator(root).validate_quality_report(output)
+    if not validation.valid:
+        raise StorageError("visual layout report is invalid: " + "; ".join(validation.errors))
+    if report["status"] != "blocked":
+        return {"layout_status": report["status"]}
+    state = _state(root)
+    return {
+        "layout_status": "blocked",
+        "state_changes": {
+            "gate_status": {
+                **dict(state.get("gate_status", {})),
+                "gate4_pre_generation": "blocked",
+            },
+            "blockers": [
+                *list(state.get("blockers", [])),
+                {
+                    "category": "visual_layout_blocked",
+                    "stage_id": "validate-visual-layout",
+                    "fragment_ids": report["blocked_fragment_ids"],
+                    "allowed_resolutions": report["allowed_resolutions"],
+                },
+            ],
+        },
+    }
 
 
 def _run_voice_preflight(

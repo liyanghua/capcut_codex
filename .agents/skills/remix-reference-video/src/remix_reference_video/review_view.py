@@ -234,6 +234,7 @@ class ReviewViewBuilder:
                 {"line_id":row["line_id"],"fragment_id":row.get("fragment_id"),"text":row.get("text", "")}
                 for row in candidate.get("lines", []) if isinstance(row, Mapping) and isinstance(row.get("line_id"), str)
             ]
+            options["copy_edit_intents"] = ["bridge", "rewrite"]
         approved = self._optional_json("approved_production_script.json")
         if approved:
             voice_policy = approved.get("allowed_tts_settings")

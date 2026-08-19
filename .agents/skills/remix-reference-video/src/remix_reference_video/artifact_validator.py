@@ -21,6 +21,23 @@ _GATE5_FILES = (
     "render_report.json",
     "jianying_import_manifest.json",
 )
+_QUALITY_REPORT_TYPES = frozenset({"narrative_coherence_report", "visual_layout_report"})
+_QUALITY_LIFECYCLES = frozenset({"ready", "stale"})
+_QUALITY_STATUSES = frozenset({"passed", "blocked", "manual_review"})
+_RESERVED_APPROVAL_KEYS = frozenset(
+    {
+        "approval",
+        "approvals",
+        "approval_records",
+        "decision",
+        "decisions",
+        "gate_status",
+        "gate_decision",
+        "gate_approval",
+        "review_package_hash",
+        "scope_ids",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +84,36 @@ class ArtifactValidator:
         for field, expected in _ENVELOPE.items():
             if value.get(field) != expected:
                 errors.append(f"{field} must be {expected!r}")
+        return ValidationResult(tuple(errors))
+
+    def validate_quality_report(self, path: Path) -> ValidationResult:
+        """Validate a machine-only quality report: envelope, lifecycle, input hashes, status, and no approval fields."""
+        requested = Path(path)
+        if not requested.is_absolute():
+            requested = self.root / requested
+        errors: list[str] = list(self.validate_artifact(requested).errors)
+        try:
+            resolved = self._path(requested, must_exist=True)
+            value = read_json_object(resolved)
+        except StorageError as error:
+            return ValidationResult((str(error),))
+        artifact_type = value.get("artifact_type")
+        if artifact_type in _QUALITY_REPORT_TYPES:
+            lifecycle = value.get("lifecycle_status")
+            if lifecycle not in _QUALITY_LIFECYCLES:
+                errors.append(f"quality report lifecycle_status must be one of {sorted(_QUALITY_LIFECYCLES)}, found {lifecycle!r}")
+            input_hashes = value.get("input_hashes")
+            if not isinstance(input_hashes, Mapping) or not input_hashes:
+                errors.append("quality report input_hashes must be a non-empty object of SHA-256 digests")
+            else:
+                for name, digest in input_hashes.items():
+                    if not isinstance(name, str) or not name or not self._is_sha256(digest):
+                        errors.append(f"quality report input hash is invalid: {name!r}")
+                        break
+            if value.get("status") not in _QUALITY_STATUSES:
+                errors.append(f"quality report status must be one of {sorted(_QUALITY_STATUSES)}, found {value.get('status')!r}")
+            for key_path in _find_reserved_approval_keys(value):
+                errors.append(f"quality report must not carry approval field: {key_path}")
         return ValidationResult(tuple(errors))
 
     def validate_hash(self, relative_path: str, expected_hash: str) -> ValidationResult:
@@ -176,3 +223,16 @@ class ArtifactValidator:
     def _sha256(path: Path) -> str:
         with path.open("rb") as stream:
             return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def _find_reserved_approval_keys(value: object, prefix: str = "$") -> tuple[str, ...]:
+    found: list[str] = []
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if isinstance(key, str) and key in _RESERVED_APPROVAL_KEYS:
+                found.append(f"{prefix}.{key}")
+            found.extend(_find_reserved_approval_keys(item, f"{prefix}.{key}"))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            found.extend(_find_reserved_approval_keys(item, f"{prefix}[{index}]"))
+    return tuple(found)

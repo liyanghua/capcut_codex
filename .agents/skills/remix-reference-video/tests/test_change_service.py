@@ -57,7 +57,7 @@ class ChangeServiceTests(unittest.TestCase):
     def test_all_eight_change_types_use_fixed_source_allowlists(self) -> None:
         approved_text_sha = hashlib.sha256("原文案".encode()).hexdigest()
         requests = [
-            {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"新文案"}},"reason":"优化表达"},
+            {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"新文案"},"edit_intent":"rewrite"},"reason":"优化表达"},
             {"change_type":"claim_scope","scope_ids":["claim01"],"payload":{"claim_ids_add":[],"claim_ids_remove":["claim01"]},"reason":"收窄声明"},
             {"change_type":"voice","scope_ids":[],"payload":{"provider":"doubao-v3","speaker":"voice-b","speed":1.05},"reason":"调整音色"},
             {"change_type":"material","scope_ids":["fragment01"],"payload":{"fragment_id":"fragment01","candidate_id":"c1","source_sha256":"a"*64,"overlay_decision":"retain_source_text"},"reason":"替换素材"},
@@ -180,7 +180,7 @@ class ChangeServiceTests(unittest.TestCase):
         session = self._switch_to_gate4_pre()
         write_frozen_run_fixture(self.root, pair_role="cold")
         RunRegistry(self.root).register(self.root)
-        request = {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"新文案"}},"reason":"优化表达"}
+        request = {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"新文案"},"edit_intent":"rewrite"},"reason":"优化表达"}
         analyzer = ChangeImpactAnalyzer(self.root, actor="operator-a")
         preview = analyzer.preview(session_id=session["session_id"], gate_id="gate4_pre_generation", request=request)
         applied = ChangeService(self.root, actor="operator-a").apply(session_id=session["session_id"], gate_id="gate4_pre_generation", request=request, preview_hash=preview["preview_hash"], idempotency_key="copy-resume")
@@ -188,7 +188,7 @@ class ChangeServiceTests(unittest.TestCase):
         class FakeRunner:
             def run(inner_self, *, resume: bool = False):
                 state = TaskStorage(self.root).read_state()
-                self.assertEqual(state["stage_status"]["build-production-script"], "succeeded")
+                self.assertEqual(state["stage_status"]["build-production-script"], "not_started")
                 self.assertEqual(read_json_object(self.root / "production_script_candidate.json")["lines"][0]["text"], "新文案")
                 TaskStorage(self.root).update_state(lambda current: current | {"gate_status": current["gate_status"] | {"gate4_pre_generation":"awaiting_user"}})
                 return type("Result", (), {"status":"awaiting_user"})()
@@ -219,6 +219,42 @@ class ChangeServiceTests(unittest.TestCase):
         updated = self.store.update_state(lambda state: state | {"active_stage":"build-gate4-pre-package","gate_status": state["gate_status"] | {"gate3_material_selection":"approved","gate3_evidence_closure":"approved","gate3":"approved","gate4_pre_generation":"awaiting_user"}})
         atomic_write_json(self.root / "gate_review_packages/gate4_pre_generation.json", {"gate_id":"gate4_pre_generation","run_id":"run-1","state_revision":updated["state_revision"],"created_at":"2026-08-17T10:01:00Z","input_hashes":{}})
         return ReviewSessionService(self.root, actor="operator-a").open("gate4_pre_generation")
+
+    def test_copy_edit_intent_rejects_merge_and_requires_intent_for_v2(self) -> None:
+        merge_request = {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"合并"},"edit_intent":"merge"},"reason":"并句"}
+        with self.assertRaises(ChangeConflict):
+            self.analyzer.validator.validate(self.session["session_id"], "gate3_material_selection", merge_request)
+        missing = {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"改写"}},"reason":"改写"}
+        with self.assertRaisesRegex(ChangeConflict, "edit_intent"):
+            self.analyzer.validator.validate(self.session["session_id"], "gate3_material_selection", missing)
+
+    def test_copy_edit_intent_normalizes_missing_intent_only_for_v1_tasks(self) -> None:
+        atomic_write_json(self.root / "production_script_candidate.json", {"schema_version":"1.0","lines":[{"line_id":"line01","fragment_id":"fragment01","text":"原文案"}]})
+        request = {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"改写"}},"reason":"改写"}
+        normalized, _ = self.analyzer.validator.validate(self.session["session_id"], "gate3_material_selection", request)
+        self.assertEqual(normalized["payload"]["edit_intent"], "rewrite")
+
+    def test_impact_stale_stages_match_dag_downstream_closure(self) -> None:
+        from remix_reference_video.change_service import _IMPACTS, dag_downstream_closure
+
+        for change_type, impact in _IMPACTS.items():
+            if not isinstance(impact, dict) or not impact.get("stale_stages"):
+                continue
+            stages = list(impact["stale_stages"])
+            with self.subTest(change_type=change_type):
+                self.assertEqual(set(stages), set(dag_downstream_closure([stages[0]])), change_type)
+
+    def test_quality_nodes_appear_in_quality_related_impacts(self) -> None:
+        from remix_reference_video.change_service import _IMPACTS
+
+        self.assertIn("build-narrative-coherence", _IMPACTS["copy"]["stale_stages"])
+        self.assertNotIn("validate-visual-layout", _IMPACTS["copy"]["stale_stages"])
+        self.assertIn("validate-visual-layout", _IMPACTS["material"]["stale_stages"])
+        self.assertIn("build-narrative-coherence", _IMPACTS["material"]["stale_stages"])
+        self.assertIn("narrative_coherence_report.json", _IMPACTS["copy"]["artifacts_to_regenerate"])
+        self.assertIn("visual_layout_report.json", _IMPACTS["material"]["artifacts_to_regenerate"])
+        self.assertNotIn("build-narrative-coherence", _IMPACTS["voice"]["stale_stages"])
+        self.assertNotIn("validate-visual-layout", _IMPACTS["rerecord"]["stale_stages"])
 
 
 if __name__ == "__main__": unittest.main()

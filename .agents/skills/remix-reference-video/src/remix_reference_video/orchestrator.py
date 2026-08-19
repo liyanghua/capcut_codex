@@ -9,6 +9,9 @@ from typing import Mapping, Protocol
 
 from .storage import StorageError
 
+LEGACY_DAG_VERSION = "legacy_v1"
+HARDENED_DAG_VERSION = "quality_hardening_v1"
+
 
 class StageAdapter(Protocol):
     execution_stage_id: str
@@ -116,6 +119,41 @@ def default_dag() -> tuple[DAGNode, ...]:
         DAGNode("freeze-fragment-plan", ("build-material-selection-package",), ("gate3_material_selection",)),
         DAGNode("validate-script-evidence", ("freeze-fragment-plan",), ("gate3_material_selection",), "gate3_evidence_closure"),
         DAGNode("summarize-gate3", ("validate-script-evidence",), ("gate3_material_selection", "gate3_evidence_closure")),
+        DAGNode("build-narrative-coherence", ("summarize-gate3",), ("gate3",)),
+        DAGNode("build-production-script", ("build-narrative-coherence",), ("gate3",), parallel_safe=True),
+        DAGNode("materialize-approved-broad", ("summarize-gate3",), ("gate3",), parallel_safe=True),
+        DAGNode("validate-visual-layout", ("materialize-approved-broad",), ("gate3",), parallel_safe=True),
+        DAGNode("voice-preflight", ("build-production-script", "validate-visual-layout"), ("gate3",)),
+        DAGNode("build-gate4-pre-package", ("voice-preflight",), ("gate3",), "gate4_pre_generation"),
+        DAGNode("generate-voice", ("build-gate4-pre-package",), ("gate4_pre_generation",)),
+        DAGNode("build-reconstruction-timeline", ("generate-voice", "materialize-approved-broad"), ("gate4_pre_generation",)),
+        DAGNode("build-gate4-post-package", ("build-reconstruction-timeline",), ("gate4_pre_generation",), "gate4_post_generation"),
+        DAGNode("summarize-gate4", ("build-gate4-post-package",), ("gate4_pre_generation", "gate4_post_generation")),
+        DAGNode("render-proxy", ("summarize-gate4",), ("gate4",)),
+        DAGNode("validate-proxy-boundaries", ("render-proxy",), ("gate4",)),
+        DAGNode("render-final", ("validate-proxy-boundaries",), ("gate4",)),
+        DAGNode("build-gate5-package", ("render-final",), ("gate4",), "gate5"),
+        DAGNode("archive-approved", ("build-gate5-package",), ("gate5",)),
+    )
+
+
+def legacy_dag() -> tuple[DAGNode, ...]:
+    """Pre-hardening DAG for in-flight runs whose frozen baseline lacks narrative_contract_v1."""
+
+    return (
+        DAGNode("init"),
+        DAGNode("split-reference", ("init",), stop_gate="gate1", parallel_safe=True),
+        DAGNode("index-assets", ("init",), parallel_safe=True),
+        DAGNode("build-coverage-precheck", ("split-reference", "index-assets"), ("gate1",)),
+        DAGNode("compile-blueprint", ("build-coverage-precheck",), ("gate1",)),
+        DAGNode("compile-mutation-plan", ("compile-blueprint",), ("gate1",)),
+        DAGNode("lint-gate2-package", ("compile-mutation-plan",), ("gate1",), "gate2"),
+        DAGNode("build-coverage-authoritative", ("lint-gate2-package",), ("gate2",)),
+        DAGNode("match-assets", ("build-coverage-authoritative",), ("gate2",)),
+        DAGNode("build-material-selection-package", ("match-assets",), ("gate2",), "gate3_material_selection"),
+        DAGNode("freeze-fragment-plan", ("build-material-selection-package",), ("gate3_material_selection",)),
+        DAGNode("validate-script-evidence", ("freeze-fragment-plan",), ("gate3_material_selection",), "gate3_evidence_closure"),
+        DAGNode("summarize-gate3", ("validate-script-evidence",), ("gate3_material_selection", "gate3_evidence_closure")),
         DAGNode("build-production-script", ("summarize-gate3",), ("gate3",), parallel_safe=True),
         DAGNode("materialize-approved-broad", ("summarize-gate3",), ("gate3",), parallel_safe=True),
         DAGNode("voice-preflight", ("build-production-script", "materialize-approved-broad"), ("gate3",)),
@@ -130,3 +168,40 @@ def default_dag() -> tuple[DAGNode, ...]:
         DAGNode("build-gate5-package", ("render-final",), ("gate4",), "gate5"),
         DAGNode("archive-approved", ("build-gate5-package",), ("gate5",)),
     )
+
+
+def dag_for_task(task_root: Path) -> tuple[DAGNode, ...]:
+    """Select the DAG for a task per the in-flight rule (quality design §4.3).
+
+    Only runs whose frozen Gate 2 baseline carries narrative_contract_v1 use the
+    hardening DAG; every other run keeps the legacy DAG and is never silently
+    switched onto the new quality nodes.
+    """
+    from .narrative_coherence import NARRATIVE_CONTRACT_VERSION
+    from .storage import StorageError, read_json_object
+
+    task = Path(task_root)
+    state_path = task / "pipeline_state.json"
+    if state_path.is_file() and not state_path.is_symlink():
+        try:
+            state = read_json_object(state_path)
+            version = state.get("production_dag_version")
+            if version == HARDENED_DAG_VERSION:
+                return default_dag()
+            if version == LEGACY_DAG_VERSION:
+                return legacy_dag()
+            gates = state.get("gate_status", {})
+            if isinstance(gates, Mapping) and gates.get("gate2") == "approved":
+                return legacy_dag()
+        except (OSError, StorageError):
+            pass
+
+    baseline = task / "content_baseline.json"
+    if baseline.is_file() and not baseline.is_symlink():
+        try:
+            value = read_json_object(baseline)
+            if value.get("narrative_contract_version") == NARRATIVE_CONTRACT_VERSION:
+                return default_dag()
+        except (OSError, StorageError):
+            pass
+    return legacy_dag()

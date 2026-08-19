@@ -15,7 +15,7 @@ class ScriptCompileError(ValueError):
 
 
 class ProductionScriptCompiler:
-    implementation_version = "production-script-compiler-v1"
+    implementation_version = "production-script-compiler-v2"
 
     def compile(
         self,
@@ -24,6 +24,7 @@ class ProductionScriptCompiler:
         mutation_plan_path: Path,
         evidence_matrix_path: Path,
         evidence_approval_record: Mapping[str, object],
+        narrative_report_path: Path | None = None,
     ) -> dict[str, Any]:
         paths = {
             "content_baseline.json": self._canonical_path(
@@ -39,6 +40,27 @@ class ProductionScriptCompiler:
         baseline = read_json_object(paths["content_baseline.json"])
         mutation = read_json_object(paths["mutation_plan.json"])
         evidence = read_json_object(paths["script_evidence_matrix.json"])
+        narrative_contract = baseline.get("narrative_contract_version")
+        if narrative_contract == "narrative_contract_v1":
+            if narrative_report_path is None:
+                raise ScriptCompileError("narrative_coherence_report is required for narrative_contract_v1")
+            paths["narrative_coherence_report.json"] = self._canonical_path(
+                narrative_report_path, "narrative_coherence_report.json"
+            )
+            narrative = read_json_object(paths["narrative_coherence_report.json"])
+            if narrative.get("artifact_type") != "narrative_coherence_report":
+                raise ScriptCompileError("narrative_coherence_report artifact is required")
+            if narrative.get("status") != "passed":
+                raise ScriptCompileError(
+                    f"narrative coherence gate is {narrative.get('status')!r}; script compilation requires a passed report"
+                )
+            narrative_rows = {
+                str(row.get("fragment_id")): row
+                for row in narrative.get("fragments", [])
+                if isinstance(row, Mapping) and isinstance(row.get("fragment_id"), str)
+            }
+        else:
+            narrative_rows = {}
         if baseline.get("artifact_type") != "content_baseline":
             raise ScriptCompileError("content_baseline artifact is required")
         if mutation.get("artifact_type") != "mutation_plan":
@@ -132,6 +154,10 @@ class ProductionScriptCompiler:
                     "selected_candidate_id": row.get("selected_candidate_id"),
                     "fallback_id": fallback_id,
                     "claim_boundary": "approved_claims_only",
+                    "narrative_role": narrative_rows.get(fragment_id, {}).get("narrative_role"),
+                    "continuity_before": narrative_rows.get(fragment_id, {}).get("continuity_before"),
+                    "continuity_after": narrative_rows.get(fragment_id, {}).get("continuity_after"),
+                    "coherence_status": narrative_rows.get(fragment_id, {}).get("coherence_status", "passed"),
                 }
             )
         return {

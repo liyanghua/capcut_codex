@@ -21,6 +21,7 @@ class ProductionScriptCompilerTests(unittest.TestCase):
             "artifact_type": "content_baseline",
             "claims": [{"claim_id": "clean", "text": "污渍可以擦净"}],
             "forbidden_claims": ["绝对防水"],
+            "narrative_contract_version": "narrative_contract_v1",
             "fragments": [
                 {
                     "fragment_id": "fragment01",
@@ -63,8 +64,44 @@ class ProductionScriptCompilerTests(unittest.TestCase):
         atomic_write_json(evidence, self.evidence)
         return baseline, mutation, evidence
 
+    def write_narrative(self, status: str = "passed") -> Path:
+        report = {
+            "artifact_type": "narrative_coherence_report",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:narrative-coherence-report",
+            "schema_version": "1.0.0",
+            "contract_version": "2.0.0-alpha.1",
+            "skill_version": "2.0.0-alpha.1",
+            "implementation_version": "narrative-coherence-v1",
+            "lifecycle_status": "ready",
+            "input_hashes": {"content_baseline.json": "a" * 64},
+            "status": status,
+            "narrative_contract_version": "narrative_contract_v1",
+            "continuity_lexicon_version": "continuity_lexicon_v1",
+            "fragments": [
+                {
+                    "fragment_id": "fragment01",
+                    "narrative_role": "功能证明",
+                    "required_actions": ["demonstrate_feature"],
+                    "continuity_before": None,
+                    "continuity_after": None,
+                    "approved_claim_ids": ["clean"],
+                    "evidence_row_ref": "fragment01",
+                    "coherence_status": "passed",
+                    "blocked_reasons": [],
+                    "business_explanation": "",
+                }
+            ],
+            "checks": {"opening_context": "passed", "transition_coverage": "passed", "claim_density": "passed", "closing": "passed"},
+            "blocked_fragment_ids": [],
+            "allowed_resolutions": [],
+        }
+        path = self.root / "narrative_coherence_report.json"
+        atomic_write_json(path, report)
+        return path
+
     def compile(self) -> dict[str, object]:
         baseline, mutation, evidence = self.write_inputs()
+        narrative = self.write_narrative()
         with evidence.open("rb") as stream:
             evidence_hash = hashlib.file_digest(stream, "sha256").hexdigest()
         return ProductionScriptCompiler().compile(
@@ -76,6 +113,7 @@ class ProductionScriptCompilerTests(unittest.TestCase):
                 "decision": "approved",
                 "input_hashes": {"script_evidence_matrix.json": evidence_hash},
             },
+            narrative_report_path=narrative,
         )
 
     def test_compiles_candidate_with_actual_input_hashes_only(self) -> None:
@@ -95,6 +133,7 @@ class ProductionScriptCompilerTests(unittest.TestCase):
         with self.assertRaisesRegex(ScriptCompileError, "missing closed evidence"):
             self.compile()
         baseline, mutation, evidence = self.write_inputs()
+        narrative = self.write_narrative()
         with self.assertRaisesRegex(ScriptCompileError, "must be approved"):
             ProductionScriptCompiler().compile(
                 content_baseline_path=baseline,
@@ -105,7 +144,26 @@ class ProductionScriptCompilerTests(unittest.TestCase):
                     "decision": "rejected",
                     "input_hashes": {},
                 },
+                narrative_report_path=narrative,
             )
+
+    def test_blocked_or_manual_narrative_report_prevents_compilation(self) -> None:
+        for status in ("blocked", "manual_review"):
+            with self.subTest(status=status):
+                baseline, mutation, evidence = self.write_inputs()
+                narrative = self.write_narrative(status)
+                with self.assertRaisesRegex(ScriptCompileError, "narrative coherence gate"):
+                    ProductionScriptCompiler().compile(
+                        content_baseline_path=baseline,
+                        mutation_plan_path=mutation,
+                        evidence_matrix_path=evidence,
+                        evidence_approval_record={
+                            "gate_id": "gate3_evidence_closure",
+                            "decision": "approved",
+                            "input_hashes": {"script_evidence_matrix.json": "a" * 64},
+                        },
+                        narrative_report_path=narrative,
+                    )
 
     def test_approved_fallback_is_selected_exactly(self) -> None:
         self.evidence["rows"][0]["fallback"] = {"fallback_id": "clean-observed"}
