@@ -235,6 +235,15 @@
       }
       if (decision.subtitle_boundary_results) parts.push(`<div class="content-group"><h4>字幕边界听审</h4><span>状态：${esc(decision.subtitle_boundary_results.status || "可用")}</span></div>`);
       if (decision.generated_voice) parts.push(`<div class="content-group"><h4>生成语音</h4><span>状态：${esc(decision.generated_voice.status || "可用")}</span></div>`);
+      const candidates = decision.script_candidates || [];
+      const validation = Object.fromEntries((decision.script_candidate_validation || []).map((row) => [row.script_candidate_id, row.status]));
+      if (candidates.length) {
+        parts.push(`<div class="content-group"><h4>脚本候选</h4>${candidates.map((row) => `<div class="candidate-row"><span>${esc(row.hypothesis || row.creative_hypothesis || row.script_candidate_id)}</span><span class="type-chip">${esc(validation[row.script_candidate_id] || row.status || "候选")}</span></div>`).join("")}</div>`);
+      }
+    }
+    if (gate === "gate1") {
+      const candidates = decision.decomposition_candidates || [];
+      if (candidates.length) parts.push(`<div class="content-group"><h4>拆解策略候选</h4>${candidates.map((row) => `<div class="candidate-row"><span>${esc(row.strategy_id || row.decomposition_id)}</span><span class="type-chip">${esc(row.decomposition_id || "候选")}</span></div>`).join("")}</div>`);
     }
     if (gate === "gate5") {
       const quality = decision.quality || {};
@@ -375,7 +384,7 @@
   function openChangeDialog() {
     const options = state.review?.impact_context?.change_options || {};
     const types = options.allowed_change_types || ["copy", "material", "voice", "structural"];
-    const labels = { boundary: "镜头衔接", copy: "文案", material: "素材", range: "素材取用范围", rerecord: "重新配音", voice: "音色或语速", structural: "结构" };
+    const labels = { boundary: "镜头衔接", copy: "文案", material: "素材", range: "素材取用范围", rerecord: "重新配音", voice: "音色或语速", structural: "结构", script_candidate_select: "切换脚本候选" };
     $("#change-dialog").classList.add("change-dialog");
     $("#change-type").innerHTML = types.map((type) => `<option value="${esc(type)}">${esc(labels[type] || type)}</option>`).join("");
     renderChangeTargets();
@@ -385,7 +394,7 @@
   function renderChangeTargets() {
     const options = state.review?.impact_context?.change_options || {};
     const type = $("#change-type").value;
-    const rows = type === "material" || type === "range" ? (options.fragments || []) : type === "copy" ? (options.lines || []) : type === "rerecord" ? (options.rerecord || []) : (options.structure_fragments || options.claims || [{ id: state.workspace.current_gate, label: state.workspace.current_gate }]);
+    const rows = type === "material" || type === "range" ? (options.fragments || []) : type === "copy" ? (options.lines || []) : type === "rerecord" ? (options.rerecord || []) : type === "script_candidate_select" ? (options.script_candidates || []) : (options.structure_fragments || options.claims || [{ id: state.workspace.current_gate, label: state.workspace.current_gate }]);
     $("#change-target").innerHTML = rows.map((row) => `<option value="${esc(row.fragment_id || row.line_id || row.claim_id || row.id)}">${esc(row.label || row.text || row.fragment_id || row.line_id || row.claim_id || row.id)}</option>`).join("");
     renderChangeExtra(type, rows[0] || {});
   }
@@ -398,6 +407,7 @@
     else if (type === "voice") extra.innerHTML = `<label for="voice-provider">服务</label><input id="voice-provider" value="${esc(options.voice?.current?.provider || "")}"><label for="voice-speaker">音色</label><input id="voice-speaker" value="${esc(options.voice?.current?.speaker || options.voice?.current?.voice || "")}"><label for="voice-speed">语速</label><input id="voice-speed" type="number" step="0.05" value="${esc(options.voice?.current?.speed || 1)}">`;
     else if (type === "range") extra.innerHTML = `<label for="range-start">开始秒数</label><input id="range-start" type="number" min="0" step="0.01" value="${esc(row.range?.start_seconds ?? 0)}"><label for="range-end">结束秒数</label><input id="range-end" type="number" min="0" step="0.01" value="${esc(row.range?.end_seconds ?? 1)}">`;
     else if (type === "material") { const candidates = row.candidates || []; extra.innerHTML = `<label for="material-candidate">候选素材</label><select id="material-candidate">${candidates.map((candidate) => `<option value="${esc(candidate.candidate_id)}" data-hash="${esc(candidate.source_sha256)}">${esc(candidate.label || candidate.candidate_id)}</option>`).join("")}</select><label for="overlay-decision">源文字处理</label><select id="overlay-decision"><option value="no_action">无需处理</option><option value="retain_source_text">保留源文字</option><option value="crop">裁切</option><option value="cover">遮盖</option><option value="replace">替换</option></select>`; }
+    else if (type === "script_candidate_select") extra.innerHTML = `<p class="muted">只允许切换到机器校验通过的候选。</p>`;
     else if (type === "structural") extra.innerHTML = `<label for="structural-type">结构动作</label><select id="structural-type"><option value="omit">删段</option><option value="merge">并段</option><option value="restructure">重排</option></select>`;
     else extra.innerHTML = "";
   }
@@ -414,6 +424,10 @@
     if (type === "rerecord") { const rerecord = (state.review?.impact_context?.change_options?.rerecord || []).find((item) => item.fragment_id === target); payload = { fragment_ids: [target], approved_text_sha256: rerecord?.approved_text_sha256 }; }
     if (type === "boundary") payload = { boundary_id: target, issue_type: "trim" };
     if (type === "structural") payload = { request_type: $("#structural-type")?.value, affected_ids: [target] };
+    if (type === "script_candidate_select") {
+      const selected = (state.review?.impact_context?.change_options?.script_candidates || []).find((item) => item.script_candidate_id === target);
+      payload = { script_candidate_id: target, script_candidates_sha256: selected?.script_candidates_sha256 };
+    }
     state.request = { change_type: type, scope_ids: [target], payload, reason };
     try {
       const result = await api(`/gates/${state.workspace.current_gate}/changes/preview`, { method: "POST", body: JSON.stringify({ session_id: state.session.session_id, request: state.request }) });

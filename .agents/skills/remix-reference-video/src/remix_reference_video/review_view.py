@@ -208,7 +208,7 @@ class ReviewViewBuilder:
                 "gate2": ["claim_scope", "structural"],
                 "gate3_material_selection": ["material", "range", "structural"],
                 "gate3_evidence_closure": ["copy", "claim_scope", "structural"],
-                "gate4_pre_generation": ["copy", "voice", "structural"],
+                "gate4_pre_generation": ["copy", "script_candidate_select", "voice", "structural"],
                 "gate4_post_generation": ["rerecord", "copy", "voice"],
                 "gate5": ["boundary", "material", "range", "rerecord", "copy", "voice", "structural"],
             }[gate_id],
@@ -235,6 +235,20 @@ class ReviewViewBuilder:
                 for row in candidate.get("lines", []) if isinstance(row, Mapping) and isinstance(row.get("line_id"), str)
             ]
             options["copy_edit_intents"] = ["bridge", "rewrite"]
+        candidates = self._optional_json("script_candidates.json")
+        validation = self._optional_json("script_candidate_validation_report.json")
+        if candidates:
+            candidates_hash = hashlib.file_digest((self.root / "script_candidates.json").open("rb"), "sha256").hexdigest()
+            passed = {
+                str(row.get("script_candidate_id")): row
+                for row in (validation or {}).get("candidates", [])
+                if isinstance(row, Mapping) and row.get("status") == "passed"
+            }
+            options["script_candidates"] = [
+                {"script_candidate_id": row.get("script_candidate_id"), "label": row.get("hypothesis") or row.get("creative_hypothesis") or row.get("script_candidate_id"), "status": passed.get(str(row.get("script_candidate_id")), {}).get("status", "candidate"), "script_candidates_sha256": candidates_hash}
+                for row in candidates.get("candidates", [])
+                if isinstance(row, Mapping) and isinstance(row.get("script_candidate_id"), str)
+            ]
         approved = self._optional_json("approved_production_script.json")
         if approved:
             voice_policy = approved.get("allowed_tts_settings")

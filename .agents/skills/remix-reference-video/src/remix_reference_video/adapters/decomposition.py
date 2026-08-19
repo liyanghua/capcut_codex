@@ -14,6 +14,12 @@ STRATEGIES = (
     "hybrid_commerce_v1",
 )
 
+_ENVELOPE = {
+    "schema_version": "1.0.0",
+    "contract_version": "2.0.0-alpha.1",
+    "skill_version": "2.0.0-alpha.1",
+}
+
 
 class DecompositionAdapter:
     implementation_version = "decomposition-adapter-v1"
@@ -55,7 +61,21 @@ class DecompositionAdapter:
                 "low_confidence_items": [row["segment_id"] for row in rows if float(row["confidence"]) < 0.8],
                 "input_hashes": {"recipe.json": hashlib.sha256(canonical.encode()).hexdigest()},
             })
-        return {"implementation_version": self.implementation_version, "candidates": candidates}
+        recipe_hash = hashlib.sha256(
+            json.dumps(recipe, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return {
+            **_ENVELOPE,
+            "artifact_type": "decomposition_bundle",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:decomposition-bundle",
+            "implementation_version": self.implementation_version,
+            "lifecycle_status": "ready",
+            "input_hashes": {"recipe.json": recipe_hash},
+            "bundle_version": "decomposition_bundle_v1",
+            "recipe_hash": recipe_hash,
+            "candidates": candidates,
+            "differences": [],
+        }
 
     @staticmethod
     def _role(strategy_id: str, shot: Mapping[str, object], index: int, total: int) -> str:

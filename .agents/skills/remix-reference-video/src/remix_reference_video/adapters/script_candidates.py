@@ -49,7 +49,24 @@ class ScriptCandidateGenerator:
                 "seed": self.seed,
                 "input_hashes": {"inputs": hashlib.sha256(json.dumps(inputs, ensure_ascii=False, sort_keys=True).encode()).hexdigest()},
             })
-        return {"candidates": candidates, "provider": self.provider, "seed": self.seed}
+        input_hash = hashlib.sha256(
+            json.dumps(inputs, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return {
+            "artifact_type": "script_candidates",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:script-candidates",
+            "schema_version": "1.0.0",
+            "contract_version": "2.0.0-alpha.1",
+            "skill_version": "2.0.0-alpha.1",
+            "implementation_version": "script-candidate-generator-v1",
+            "lifecycle_status": "ready",
+            "input_hashes": {"creative-inputs.json": input_hash},
+            "candidates": candidates,
+            "provider": self.provider,
+            "model": self.model,
+            "prompt_template_version": "script_candidate_prompt_v1",
+            "seed": self.seed,
+        }
 
 
 class ScriptCandidateValidator:
@@ -73,4 +90,19 @@ class ScriptCandidateValidator:
                     reasons.append("consecutive_pure_proof")
             results.append({"script_candidate_id": candidate.get("script_candidate_id"), "status": "blocked" if reasons else "passed", "reasons": reasons})
         status = "blocked" if results and all(row["status"] == "blocked" for row in results) else "passed"
-        return {"status": status, "candidates": results, "validation_policy_version": "script_candidate_rank_v1"}
+        input_hash = hashlib.sha256(
+            json.dumps(artifact, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return {
+            "artifact_type": "script_candidate_validation_report",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:script-candidate-validation-report",
+            "schema_version": "1.0.0",
+            "contract_version": "2.0.0-alpha.1",
+            "skill_version": "2.0.0-alpha.1",
+            "implementation_version": "script-candidate-validator-v1",
+            "lifecycle_status": "ready",
+            "input_hashes": {"script_candidates.json": input_hash},
+            "status": status,
+            "candidates": results,
+            "validation_policy_version": "script_candidate_rank_v1",
+        }

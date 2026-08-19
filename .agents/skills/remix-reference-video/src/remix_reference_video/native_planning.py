@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Mapping
+from datetime import UTC, datetime
 
 from .adapters.blueprint import BlueprintAdapter
+from .adapters.decomposition import DecompositionAdapter
 from .adapters.mutation import ControlledMutationAdapter
 from .adapters.retrieval import RetrievalAdapter
 from .native_registry import NativeAdapterRegistry, NativeStageAdapter
@@ -37,6 +39,25 @@ def register_planning_adapters(
     for path in (brief, recipe, precheck, profiles, state_file):
         if path.resolve(strict=False).parent != root and root not in path.resolve(strict=False).parents:
             raise ValueError(f"planning input escapes task root: {path}")
+
+    decomposition_output = root / "decomposition_bundle.json"
+    gate1_package = root / "gate_review_packages" / "gate1.json"
+    registry.register(NativeStageAdapter(
+        root,
+        execution_stage_id="build-decomposition-candidates",
+        implementation_version="decomposition-native-v1",
+        required_inputs=(recipe,),
+        declared_outputs=(decomposition_output,),
+        execute_fn=lambda: DecompositionAdapter().build(read_json_object(recipe)),
+    ))
+    registry.register(NativeStageAdapter(
+        root,
+        execution_stage_id="build-gate1-package",
+        implementation_version="gate1-creative-package-v1",
+        required_inputs=(recipe, decomposition_output, state_file),
+        declared_outputs=(gate1_package,),
+        execute_fn=lambda: _gate1_package(root, recipe, decomposition_output, state_file),
+    ))
 
     blueprint_output = root / "shot_blueprint.json"
     baseline_output = root / "content_baseline.json"
@@ -134,6 +155,29 @@ def _match_assets(
         asset_profiles=_required_list(read_json_object(profiles_path), "asset_profiles"),
         gate2_approved=_gate_approved(state_path, "gate2"),
     )
+
+
+def _gate1_package(root: Path, recipe: Path, decomposition: Path, state_path: Path) -> Mapping[str, object]:
+    state = read_json_object(state_path)
+    bundle = read_json_object(decomposition)
+    candidates = bundle.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise ValueError("decomposition candidates are required")
+    return {
+        "artifact_type": "gate_review_package",
+        "schema_id": "urn:capcut:remix-reference-video:artifact:gate-review-package",
+        "schema_version": "1.0.0", "contract_version": "2.0.0-alpha.1", "skill_version": "2.0.0-alpha.1",
+        "gate_id": "gate1", "run_id": state["run_id"], "state_revision": state["state_revision"],
+        "created_at": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "input_hashes": {"recipe.json": _file_hash(recipe), "decomposition_bundle.json": _file_hash(decomposition)},
+        "creative_bindings": {"selected_decomposition_id": candidates[0]["decomposition_id"], "decomposition_bundle.json_sha256": _file_hash(decomposition)},
+    }
+
+
+def _file_hash(path: Path) -> str:
+    import hashlib
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def _gate_approved(path: Path, gate_id: str) -> bool:

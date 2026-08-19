@@ -38,6 +38,9 @@ _ARTIFACT_FILES = (
     "production_script_candidate.json", "approved_production_script.json", "voice_preflight.json",
     "reconstruction_timeline.json", "final_validation_report.json", "render_report.json", "captions.srt",
     "voice/voice_manifest.json", "voice/voice_qa_report.json", "remix.mp4",
+    "decomposition_bundle.json", "creative_objective.json", "remix_strategy_candidates.json",
+    "script_candidates.json", "script_candidate_validation_report.json", "shot_quality_report.json",
+    "final_content_diagnostic_report.json", "enhancement_plan.json",
 )
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
 _VIDEO_EXT = (".mp4", ".mov", ".m4v", ".webm")
@@ -64,6 +67,14 @@ _BUSINESS_ARTIFACTS = {
     "remix.mp4": ("成片终审", "最终成片"),
     "captions.srt": ("成片终审", "字幕"),
     "jianying_import_manifest.json": ("成片终审", "剪映导入清单"),
+    "decomposition_bundle.json": ("参考拆解", "拆解策略候选"),
+    "creative_objective.json": ("复刻方案", "创作目标"),
+    "remix_strategy_candidates.json": ("复刻方案", "复刻策略候选"),
+    "script_candidates.json": ("文案与声音", "脚本候选"),
+    "script_candidate_validation_report.json": ("文案与声音", "脚本候选校验"),
+    "shot_quality_report.json": ("成片终审", "分镜质量诊断"),
+    "final_content_diagnostic_report.json": ("成片终审", "成片内容诊断"),
+    "enhancement_plan.json": ("素材与证据", "增强候选计划"),
 }
 _STAGE_BUSINESS = {
     "split-reference": "参考拆解",
@@ -126,6 +137,9 @@ class WorkbenchWorkspaceBuilder:
         voice_manifest = self._optional_json("voice/voice_manifest.json")
         approved_script = self._optional_json("approved_production_script.json")
         script_candidate = self._optional_json("production_script_candidate.json")
+        script_candidates = self._optional_json("script_candidates.json")
+        script_candidate_validation = self._optional_json("script_candidate_validation_report.json")
+        decomposition = self._optional_json("decomposition_bundle.json")
         preflight = self._optional_json("voice_preflight.json")
         reconstruction = self._optional_json("reconstruction_timeline.json")
         final_validation = self._optional_json("final_validation_report.json")
@@ -207,6 +221,9 @@ class WorkbenchWorkspaceBuilder:
                 "missing_objects": list((matches or {}).get("missing_objects", [])) if gate_id in {"gate3_material_selection", "gate3_evidence_closure"} and isinstance(matches, Mapping) else [],
                 "production_script": self._artifact_summary(gate_id, approved_script or script_candidate, "script"),
                 "script_details": self._script_details(gate_id, approved_script, script_candidate),
+                "script_candidates": script_candidates.get("candidates", []) if isinstance(script_candidates, Mapping) else [],
+                "script_candidate_validation": script_candidate_validation.get("candidates", []) if isinstance(script_candidate_validation, Mapping) else [],
+                "decomposition_candidates": decomposition.get("candidates", []) if isinstance(decomposition, Mapping) else [],
                 "voice_preflight": self._artifact_summary(gate_id, preflight, "voice_preflight"),
                 "voice_preflight_details": self._voice_preflight_details(gate_id, preflight),
                 "generated_voice": self._artifact_summary(gate_id, voice_manifest, "voice"),
