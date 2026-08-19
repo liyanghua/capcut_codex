@@ -17,6 +17,7 @@ _ENVELOPE = {
     "contract_version": "2.0.0-alpha.1",
     "skill_version": "2.0.0-alpha.1",
 }
+CREATIVE_CONTRACT_VERSION = "creative_contract_v1"
 
 _CLAIMS = (
     ("protect", "保护餐桌并保留木纹"),
@@ -46,7 +47,8 @@ _FRAGMENTS = (
 
 
 def prepare_tablemat_case(
-    *, task_root: Path, reference_source: Path, asset_root: Path
+    *, task_root: Path, reference_source: Path, asset_root: Path,
+    creative_contract_version: str | None = None,
 ) -> dict[str, object]:
     task = Path(task_root).resolve(strict=False)
     if task.exists():
@@ -142,6 +144,10 @@ def prepare_tablemat_case(
         "asset_snapshot": {source_name: _sha256(assets / source_name) for _, _, _, source_name, *_ in _FRAGMENTS},
         "approval_records": [],
     }
+    if creative_contract_version is not None:
+        if creative_contract_version != CREATIVE_CONTRACT_VERSION:
+            raise ValueError(f"unsupported creative contract version: {creative_contract_version}")
+        snapshot["creative_contract_version"] = CREATIVE_CONTRACT_VERSION
     atomic_write_json(task / "g_b_frozen_input_snapshot.json", snapshot)
     return snapshot
 

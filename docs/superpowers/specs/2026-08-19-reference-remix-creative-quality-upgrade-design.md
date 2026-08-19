@@ -217,6 +217,13 @@ Gate 4 生成前审核包绑定 `script_candidates.json`、候选验证报告、
 - 句间承接未知，或口播预计时长超过画面预算；
 - 任一 `required=true` 创作目标没有脚本行和预期画面覆盖。
 
+角色、承接和目标覆盖必须由冻结输入驱动的确定性规则判定：
+
+- `narrative_role` 只能来自版本化枚举 `opening|context|problem|product|proof|result|close`，由 Gate 2 的 `required_actions`、参考蓝图镜头意图和 Gate 3 evidence row 的顺序映射；缺少任一输入时返回 `manual_review`，不得猜测；
+- `continuity_before/after` 只能从 `continuity_lexicon_v1` 的受控连接词表选择，连接词不得引入新的产品事实或未批准声明；词表无法覆盖的转场为 `blocked`；
+- 目标覆盖只认 `creative_objective.json` 中的 `objective_id` 和脚本行/预期画面显式引用，不能以候选置信度或素材文件名替代；
+- 连续纯卖点、缺开场、缺推进、缺证明、缺收束、未知承接和禁用声明分别映射到固定的 `blocked` 原因码，报告必须记录原因码和恢复 Gate。
+
 机器门禁不替代人工判断。通过只表示候选满足结构与证据底线，Gate 4 仍需运营判断表达是否自然、有吸引力且符合受众。
 
 ### 8.4 脚本到分镜
@@ -237,6 +244,8 @@ Gate 4 生成后听审批准后，流程按“生成审核代理 → `validate-s
 - 相邻镜头是否重复、突跳或语义断裂；
 - 前三秒是否具备视觉变化、商品信号和钩子信息；
 - 高光候选是否达到当前策略要求。
+
+`visual_layout_policy_v1` 的确定性判定固定为：图片必须 `contain`；视频仅在 `retain_source_text` 时使用 `contain`；任何源文字/水印裁切、有效放大倍数超过 `2.0x`、已知文字区域渲染高度低于 `18px` 或素材尺寸/文字可读性未知，均为 `blocked`，并记录片段、输入哈希和补素材建议。
 
 报告状态为 `passed|manual_review|blocked`。确定性的商品身份错误、证据/动作缺失、文字被裁切、时间线越界或 required action 未完成为 `blocked`，不得正式渲染；主观连续性、高光强度或审美问题为 `manual_review`，不增加新 Gate、不阻断正式渲染，但必须携带到 Gate 5 供最终人工判断，不能静默显示为 passed。修改脚本使 Gate 4 生成前及下游失效；替换素材或范围使 Gate 3 material selection、Gate 3 evidence closure 及全部下游失效；仅调整批准宽范围内精确裁点时使 timeline、代理、该报告和下游失效。
 
@@ -330,7 +339,7 @@ AI 增强只作为分镜级受控操作：
 - Gate 首轮通过率和返工轮次按表中 Gate package 主键去重；其他指标严格使用各自行的计量主键，候选数量不进入任何 run/video 分母。首个绑定当前输入哈希且状态为 `awaiting_user` 的 package 是“首轮”，任何 `changes_requested|rejected` 后生成的新 revision 都是返工轮。
 - 目标权重来自 Gate 2 已批准的 `creative_objective.json`，必须非负且总和为 `1.0`；`required=true` 目标未满足时覆盖率仍可计算，但机器门禁失败。
 - required action 的观察来源固定为 `shot_quality_report.shots[].action_results[]`，每项必须引用审核代理帧或时间范围；缺证据为 `not_measured`，不能计为 passed。
-- 工作台增加 `review.session_started`、`review.visibility_changed`、`review.activity`、`review.active_tick` 和 `review.decision_submitted` 事件。客户端每 10 秒最多发送一个 `active_tick`，且只在页面可见、最近 30 秒发生过键盘/鼠标/触控输入、没有 workbench API 请求 pending 时发送；提交决定时再发送一个 `0..10` 秒的 final partial tick。服务端按 session+连续 sequence 去重并累加 tick 的 `delta_seconds`。有效决策时间是当前 package revision 从 session start 到有效 decision 之间的 tick 总秒数；网络等待、后台和空闲不会产生 tick。sequence 有缺口、缺 session/decision 边界或 final partial tick 时为 `not_measured`；完整序列的零秒值才是合法测量结果。
+- 有效决策时间沿用已实现的区间模型：服务端记录 `review.active_start`、`review.active_stop`、`review.heartbeat`、`review.pause`、`review.evidence_interaction` 和 `review.decision_accepted`；`decision_seconds` 为当前 package revision 从首次证据交互到有效决定之间的活跃区间总和（等价于 `decision_accepted - evidence_first_interaction` 的已确认口径）。后台、空闲和网络等待不计入；缺 session/decision 边界或区间不完整时为 `not_measured`，零秒只有在完整区间链成立时才有效。不得实现或引用 `review.session_started`、`review.visibility_changed`、`review.activity`、`review.active_tick` tick 事件。
 - 首版不设置未经校准的阶段通过率阈值；指标先作为监督运营测量。任何后续阈值都必须进入版本化 policy 并保留历史计算结果。
 
 ## 12. 状态、审批与兼容
@@ -340,8 +349,9 @@ AI 增强只作为分镜级受控操作：
 - `pipeline_state.json` 仍是唯一审批权威；候选自身不能携带或替代 Gate approval。
 - 新 V2 产物使用五字段 envelope、registry 注册、输入哈希和 `ready|stale` 生命周期。
 - 所有新产物先定义 JSON Schema、注册到 canonical registry，并由 artifact validator 校验；DAG 节点、Native adapter、Gate package、ChangeService 失效闭包和工作台投影必须同步登记。
-- 已冻结且缺少 `creative_objective_v1` 的 V1/V2 历史任务只能按原 DAG 续跑。首版不提供在位迁移；要使用本设计能力必须从同一冻结输入快照创建新的 run 和 `video_version_id`，不得通过返回某个 Gate 给旧 run 静默变轨。
+- 已冻结且 `g_b_frozen_input_snapshot.json` 缺少 `creative_contract_version="creative_contract_v1"` 的历史 V1/V2 任务，按冻结时的 legacy/hardened DAG 续跑，不得静默启用创作节点。要使用本设计能力必须从同一冻结输入快照创建新的 creative run 和 `video_version_id`，由 Stage 0 显式写入该单一 capability marker；不得通过返回某个 Gate 给旧 run 静默变轨。
 - cold/hot 不复用候选选择、人工决定或审批；技术 cache 仍遵守现有 G-B 边界。
+- 监督 G-B 资格运行固定使用加固 `default_dag()`，不启用 P1–P3 创作节点；P1–P3 只在带 `creative_contract_version` 的隔离新任务中验证，并按 §15 与 `baseline_v0` 比较。
 - 普通 V2 production lock、共享生产缓存和一线发布条件保持不变。
 
 ### 12.1 新产物与执行契约
@@ -353,6 +363,7 @@ AI 增强只作为分镜级受控操作：
 | `remix_strategy_candidates.json` | Gate 2 前 Controlled Mutation | 目标、选中拆解、`coverage_precheck.json` | Gate 2 原子 package；权威 coverage、Retrieval | 无可实现候选阻断 Gate 2；选择变化使 Gate 2 及下游 stale |
 | `script_candidates.json` | `generate-script-candidates` | Gate 2 批准包、Gate 3 evidence、叙事报告 | 候选选择；物化 `production_script_candidate.json` | 全部候选失败阻断 Gate 4 pre；文案/素材/证据变化按 DAG 闭包 stale |
 | `script_candidate_validation_report.json` | `validate-script-candidates` | 脚本候选、目标、证据、叙事报告、画面预算 | 候选选择；Gate 4 pre package | 只允许 passed 候选被选择；候选或任一校验输入变化即 stale |
+| `script_candidate_select` change | ChangeService / Gate 4 pre | 当前候选列表、`script_candidate_validation_report.json` | 重新物化生产脚本和 `voice_preflight.json`，重建 Gate 4 pre package | 仅允许 `passed` 候选；使 Gate 4 pre/post 与 Gate 5 stale，不改变 Gate 2/3 |
 | `shot_quality_report.json` | Gate 4 post 批准后代理生成后的 `validate-shot-quality` | 批准脚本、material、timeline、代理帧、叙事/布局报告 | 正式渲染准入；Gate 5/工作台 | 确定性问题 blocked，主观问题 manual_review；脚本/素材/裁点按 §9.1 失效 |
 | `enhancement_plan.json` | 用户发起修改后的可选 `propose-shot-enhancement` | 指定分镜、诊断、批准素材、修改意图 | Gate 3 material selection 候选 | 不属于默认 DAG；采用候选使 Gate 3 两子状态及下游 stale |
 | `final_content_diagnostic_report.json` | 正式渲染后的 `build-final-content-diagnostic` | 成片、最终校验、shot report、批准目标/策略 | Gate 5 package；工作台 | 确定性硬问题 blocked，主观项 manual_review；任何成片输入变化即 stale |

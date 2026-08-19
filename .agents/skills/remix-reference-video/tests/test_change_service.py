@@ -256,5 +256,45 @@ class ChangeServiceTests(unittest.TestCase):
         self.assertNotIn("build-narrative-coherence", _IMPACTS["voice"]["stale_stages"])
         self.assertNotIn("validate-visual-layout", _IMPACTS["rerecord"]["stale_stages"])
 
+    def test_script_candidate_select_requires_passed_candidate_and_stales_gate4(self) -> None:
+        session = self._switch_to_gate4_pre()
+        candidates = {
+            "candidates": [
+                {"script_candidate_id": "script-1", "status": "candidate", "lines": [{"line_id": "line01", "text": "新脚本"}]},
+                {"script_candidate_id": "script-2", "status": "candidate", "lines": [{"line_id": "line01", "text": "候选脚本"}]},
+            ]
+        }
+        validation = {"candidates": [{"script_candidate_id": "script-1", "status": "passed"}, {"script_candidate_id": "script-2", "status": "blocked"}]}
+        atomic_write_json(self.root / "script_candidates.json", candidates)
+        atomic_write_json(self.root / "script_candidate_validation_report.json", validation)
+        digest = hashlib.sha256((self.root / "script_candidates.json").read_bytes()).hexdigest()
+        request = {"change_type": "script_candidate_select", "scope_ids": ["script-1"], "payload": {"script_candidate_id": "script-1", "script_candidates_sha256": digest}, "reason": "选择更连贯的脚本候选"}
+        preview = self.analyzer.preview(session_id=session["session_id"], gate_id="gate4_pre_generation", request=request)
+        self.assertEqual(preview["earliest_affected_gate"], "gate4_pre_generation")
+        self.assertIn("production_script_candidate.json", preview["artifacts_to_regenerate"])
+        self.assertIn("voice_preflight.json", preview["artifacts_to_regenerate"])
+        self.assertIn("gate4_pre_generation", preview["stale_gates"])
+        self.assertIn("build-production-script", preview["stale_stages"])
+        self.assertNotIn("validate-visual-layout", preview["stale_stages"])
+        bad = dict(request, payload={**request["payload"], "script_candidate_id": "script-2"}, scope_ids=["script-2"])
+        with self.assertRaisesRegex(ChangeConflict, "passed"):
+            self.analyzer.preview(session_id=session["session_id"], gate_id="gate4_pre_generation", request=bad)
+
+    def test_script_candidate_select_materializes_candidate_and_handoff(self) -> None:
+        candidates = {"candidates": [{"script_candidate_id": "script-1", "status": "candidate", "lines": [{"line_id": "line01", "text": "新脚本"}]}]}
+        validation = {"candidates": [{"script_candidate_id": "script-1", "status": "passed"}]}
+        atomic_write_json(self.root / "script_candidates.json", candidates)
+        atomic_write_json(self.root / "script_candidate_validation_report.json", validation)
+        override = {
+            "change_type": "script_candidate_select",
+            "change_request_id": "candidate-change-1",
+            "request": {"payload": {"script_candidate_id": "script-1"}},
+        }
+        WorkbenchOrchestrator._materialize_override(self.root, override)
+        selected = read_json_object(self.root / "production_script_candidate.json")
+        self.assertEqual(selected["selected_script_candidate_id"], "script-1")
+        handoff = read_json_object(self.root / "stage_inputs/select-script-candidate.json")
+        self.assertEqual(handoff["payload"], {"script_candidate_id": "script-1"})
+
 
 if __name__ == "__main__": unittest.main()

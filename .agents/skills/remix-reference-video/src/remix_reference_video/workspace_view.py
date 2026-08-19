@@ -712,7 +712,9 @@ class WorkbenchWorkspaceBuilder:
             }
             for stage_id, record in latest.items()
         ]
-        order = [node.node_id for node in _dag_nodes()]
+        from .orchestrator import dag_for_task
+
+        order = [node.node_id for node in dag_for_task(self.root)]
         rows.sort(key=lambda row: order.index(row["stage_id"]) if row["stage_id"] in order else len(order))
         return rows
 
@@ -733,9 +735,3 @@ class WorkbenchWorkspaceBuilder:
     def _safe_relative(value: str) -> bool:
         path = Path(value)
         return not path.is_absolute() and ".." not in path.parts and "\\" not in value
-
-
-def _dag_nodes() -> tuple[object, ...]:
-    from .orchestrator import default_dag
-
-    return default_dag()

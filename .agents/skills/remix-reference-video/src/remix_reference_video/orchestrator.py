@@ -11,6 +11,7 @@ from .storage import StorageError
 
 LEGACY_DAG_VERSION = "legacy_v1"
 HARDENED_DAG_VERSION = "quality_hardening_v1"
+CREATIVE_DAG_VERSION = "creative_quality_v1"
 
 
 class StageAdapter(Protocol):
@@ -170,29 +171,43 @@ def legacy_dag() -> tuple[DAGNode, ...]:
     )
 
 
-def dag_for_task(task_root: Path) -> tuple[DAGNode, ...]:
-    """Select the DAG for a task per the in-flight rule (quality design §4.3).
+def creative_dag() -> tuple[DAGNode, ...]:
+    """Return the creative DAG generation.
 
-    Only runs whose frozen Gate 2 baseline carries narrative_contract_v1 use the
-    hardening DAG; every other run keeps the legacy DAG and is never silently
-    switched onto the new quality nodes.
+    The capability selector is introduced before the creative nodes land.  A
+    creative run therefore remains executable on the hardened graph until the
+    later P1-P3 tasks replace this placeholder with the expanded graph.
     """
+
+    return default_dag()
+
+
+def dag_version_for_task(task_root: Path) -> str:
+    """Return the immutable DAG generation selected by frozen task inputs."""
+
     from .narrative_coherence import NARRATIVE_CONTRACT_VERSION
     from .storage import StorageError, read_json_object
 
     task = Path(task_root)
+    frozen = task / "g_b_frozen_input_snapshot.json"
+    if frozen.is_file() and not frozen.is_symlink():
+        try:
+            snapshot = read_json_object(frozen)
+            if snapshot.get("creative_contract_version") == "creative_contract_v1":
+                return CREATIVE_DAG_VERSION
+        except (OSError, StorageError):
+            pass
+
     state_path = task / "pipeline_state.json"
     if state_path.is_file() and not state_path.is_symlink():
         try:
             state = read_json_object(state_path)
             version = state.get("production_dag_version")
-            if version == HARDENED_DAG_VERSION:
-                return default_dag()
-            if version == LEGACY_DAG_VERSION:
-                return legacy_dag()
+            if version in {HARDENED_DAG_VERSION, LEGACY_DAG_VERSION}:
+                return str(version)
             gates = state.get("gate_status", {})
             if isinstance(gates, Mapping) and gates.get("gate2") == "approved":
-                return legacy_dag()
+                return LEGACY_DAG_VERSION
         except (OSError, StorageError):
             pass
 
@@ -201,7 +216,23 @@ def dag_for_task(task_root: Path) -> tuple[DAGNode, ...]:
         try:
             value = read_json_object(baseline)
             if value.get("narrative_contract_version") == NARRATIVE_CONTRACT_VERSION:
-                return default_dag()
+                return HARDENED_DAG_VERSION
         except (OSError, StorageError):
             pass
+    return LEGACY_DAG_VERSION
+
+
+def dag_for_task(task_root: Path) -> tuple[DAGNode, ...]:
+    """Select the DAG from the frozen capability and compatibility contract.
+
+    The frozen creative capability is checked before existing state.  A task
+    without that marker can only use the legacy or hardened graph selected by
+    its persisted state/baseline; it cannot silently opt into creative nodes.
+    """
+
+    version = dag_version_for_task(task_root)
+    if version == CREATIVE_DAG_VERSION:
+        return creative_dag()
+    if version == HARDENED_DAG_VERSION:
+        return default_dag()
     return legacy_dag()

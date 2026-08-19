@@ -15,9 +15,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .adapters import content_fingerprint
-from .orchestrator import StageAdapter, default_dag
+from .orchestrator import StageAdapter, dag_for_task, default_dag
 from .stage_input_validator import StageInputValidator
-from .storage import StorageError, atomic_write_json
+from .storage import StorageError, atomic_write_json, read_json_object
 
 
 class NativeRegistryError(StorageError):
@@ -150,8 +150,22 @@ class NativeAdapterRegistry:
 
     def __init__(self, task_root: Path) -> None:
         self.task_root = Path(task_root).resolve(strict=True)
+        # Registration accepts the union of known generations. Execution order
+        # and exposure still follow the task-selected frozen DAG.
         self._nodes = {node.node_id: node for node in default_dag()}
         self._adapters: dict[str, StageAdapter] = {}
+
+    def _selected_dag(self) -> tuple[object, ...]:
+        # Empty roots are used by adapter-registration fixtures before a task
+        # is initialized. Initialized tasks must follow their frozen DAG.
+        state = self.task_root / "pipeline_state.json"
+        marker = self.task_root / "g_b_frozen_input_snapshot.json"
+        baseline = self.task_root / "content_baseline.json"
+        if marker.is_file() or (baseline.is_file() and "narrative_contract_version" in _read_json_keys(baseline)):
+            return dag_for_task(self.task_root)
+        if state.is_file() and "production_dag_version" in _read_json_keys(state):
+            return dag_for_task(self.task_root)
+        return default_dag()
 
     def register(self, adapter: StageAdapter) -> None:
         stage_id = getattr(adapter, "execution_stage_id", None)
@@ -170,10 +184,18 @@ class NativeAdapterRegistry:
             raise NativeRegistryError(f"native adapter is not registered: {stage_id}") from error
 
     def stage_ids(self) -> tuple[str, ...]:
-        return tuple(node.node_id for node in default_dag() if node.node_id in self._adapters)
+        return tuple(node.node_id for node in self._selected_dag() if node.node_id in self._adapters)
 
     def adapters(self) -> tuple[StageAdapter, ...]:
         return tuple(self._adapters[stage_id] for stage_id in self.stage_ids())
 
 
 __all__ = ["NativeAdapterRegistry", "NativeRegistryError", "NativeStageAdapter"]
+
+
+def _read_json_keys(path: Path) -> Mapping[str, object]:
+    try:
+        value = read_json_object(path)
+    except (OSError, StorageError):
+        return {}
+    return value

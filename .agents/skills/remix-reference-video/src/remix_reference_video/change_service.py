@@ -40,6 +40,7 @@ _SCHEMA_NAMES = {
     "rerecord": "changes/rerecord.schema.json",
     "boundary": "changes/boundary.schema.json",
     "structural": "changes/structural.schema.json",
+    "script_candidate_select": "changes/script-candidate-select.schema.json",
 }
 
 _IMPACTS: dict[str, dict[str, object]] = {
@@ -54,6 +55,18 @@ _IMPACTS: dict[str, dict[str, object]] = {
         "quality_dimensions_affected": ["copy_accuracy", "evidence_alignment", "voice_quality", "rhythm", "delivery_integrity"],
         "business_explanation": "文案变化会使生成前审核及其后续语音、时间轴和成片失效。",
         "recovery_path": "重新编译脚本并预检，从 Gate 4 生成前重新审核。",
+    },
+    "script_candidate_select": {
+        "earliest_affected_gate": "gate4_pre_generation",
+        "stale_gates": ["gate4_pre_generation", "gate4_post_generation", "gate4", "gate5"],
+        "stale_stages": ["build-production-script", "voice-preflight", "build-gate4-pre-package", "generate-voice", "build-reconstruction-timeline", "build-gate4-post-package", "summarize-gate4", "render-proxy", "validate-proxy-boundaries", "render-final", "build-gate5-package"],
+        "artifacts_to_regenerate": ["production_script_candidate.json", "voice_preflight.json", "voice/", "reconstruction_timeline.json", "captions.srt", "remix.mp4"],
+        "media_actions": ["regenerate_voice", "rebuild_timeline", "rerender"],
+        "requires_tts": True,
+        "requires_render": True,
+        "quality_dimensions_affected": ["copy_accuracy", "evidence_alignment", "rhythm", "delivery_integrity"],
+        "business_explanation": "切换已通过的脚本候选会重新物化生产脚本和配音预检，并使 Gate 4 及成片失效。",
+        "recovery_path": "返回 Gate 4 生成前重新审核选中的脚本候选。",
     },
     "claim_scope": {
         "earliest_affected_gate": "gate2",
@@ -169,6 +182,11 @@ def _sha256(value: object) -> str:
     return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
+def _file_sha256(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -210,6 +228,8 @@ class _ChangeValidator:
         except (SnapshotSchemaError, OSError) as error:
             raise ChangeConflict(f"change request is invalid: {error}") from error
         self._validate_source(normalized)
+        if normalized.get("change_type") == "script_candidate_select" and gate_id != "gate4_pre_generation":
+            raise ChangeConflict("script candidate selection is only allowed at gate4_pre_generation")
         return normalized, dict(identity)
 
     def _validate_source(self, request: Mapping[str, object]) -> None:
@@ -237,6 +257,8 @@ class _ChangeValidator:
             self._validate_boundary(payload, scope_ids)
         elif change_type == "structural":
             self._validate_structural(payload, scope_ids)
+        elif change_type == "script_candidate_select":
+            self._validate_script_candidate_select(payload, scope_ids)
 
     def _validate_copy(self, payload: Mapping[str, object], scope_ids: list[str]) -> None:
         line_ids = payload.get("line_ids")
@@ -377,6 +399,25 @@ class _ChangeValidator:
         allowed = self._ids(baseline.get("fragments"), "fragment_id")
         if not set(affected).issubset(allowed):
             raise ChangeConflict("structural fragment is not allowlisted")
+
+    def _validate_script_candidate_select(self, payload: Mapping[str, object], scope_ids: list[str]) -> None:
+        candidate_id = payload.get("script_candidate_id")
+        expected_hash = payload.get("script_candidates_sha256")
+        self._match_scope(scope_ids, [candidate_id])
+        candidates_path = self.root / "script_candidates.json"
+        if not candidates_path.is_file() or candidates_path.is_symlink():
+            raise ChangeConflict("script candidates artifact is missing")
+        if _file_sha256(candidates_path) != expected_hash:
+            raise ChangeConflict("script candidates hash is stale")
+        candidates = read_json_object(candidates_path).get("candidates")
+        if not isinstance(candidates, list):
+            raise ChangeConflict("script candidates artifact is invalid")
+        if not any(isinstance(row, Mapping) and row.get("script_candidate_id") == candidate_id for row in candidates):
+            raise ChangeConflict("script candidate is not allowlisted")
+        report = read_json_object(self.root / "script_candidate_validation_report.json")
+        validated = report.get("candidates")
+        if not isinstance(validated, list) or not any(isinstance(row, Mapping) and row.get("script_candidate_id") == candidate_id and row.get("status") == "passed" for row in validated):
+            raise ChangeConflict("script candidate must be passed")
 
     @staticmethod
     def _match_scope(scope_ids: list[str], payload_ids: object) -> None:
@@ -847,6 +888,45 @@ class WorkbenchOrchestrator:
             updated = {**candidate, "lines": updated_lines, "supersedes_change_request_id": change_id}
             atomic_write_json(version_dir / "production-script-candidate.json", updated)
             atomic_write_json(candidate_path, updated)
+            return
+
+        if change_type == "script_candidate_select":
+            candidates = read_json_object(task / "script_candidates.json").get("candidates")
+            candidate_id = payload.get("script_candidate_id")
+            if not isinstance(candidates, list) or not isinstance(candidate_id, str):
+                raise ChangeConflict("script candidate materialization input is invalid")
+            selected = next(
+                (row for row in candidates if isinstance(row, Mapping) and row.get("script_candidate_id") == candidate_id),
+                None,
+            )
+            if not isinstance(selected, Mapping):
+                raise ChangeConflict("selected script candidate is missing")
+            validation = read_json_object(task / "script_candidate_validation_report.json").get("candidates")
+            if not isinstance(validation, list) or not any(
+                isinstance(row, Mapping) and row.get("script_candidate_id") == candidate_id and row.get("status") == "passed"
+                for row in validation
+            ):
+                raise ChangeConflict("selected script candidate is not passed")
+            candidate_path = task / "production_script_candidate.json"
+            before = read_json_object(candidate_path) if candidate_path.is_file() else {}
+            selected_value = dict(selected)
+            if isinstance(before, Mapping):
+                selected_value = {
+                    **dict(before),
+                    **selected_value,
+                    "selected_script_candidate_id": candidate_id,
+                    "supersedes_change_request_id": change_id,
+                }
+            atomic_write_json(version_dir / "before-production-script-candidate.json", before)
+            atomic_write_json(version_dir / "production-script-candidate.json", selected_value)
+            atomic_write_json(candidate_path, selected_value)
+            WorkbenchOrchestrator._write_change_stage_input(
+                task=task,
+                stage_id="select-script-candidate",
+                payload={"script_candidate_id": candidate_id},
+                change_id=change_id,
+                version_dir=version_dir,
+            )
             return
 
         if change_type == "voice":

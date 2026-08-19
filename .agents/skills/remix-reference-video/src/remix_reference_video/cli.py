@@ -153,6 +153,11 @@ def _parser() -> argparse.ArgumentParser:
     pair.add_argument("--decision-dir", type=Path)
     pair.add_argument("--actor", default="gb-owner")
     pair.add_argument(
+        "--creative-contract",
+        choices=("v1",),
+        help="verify an immutable frozen snapshot already carrying creative_contract_v1",
+    )
+    pair.add_argument(
         "--resume-existing",
         action="store_true",
         help="resume the declared isolated pair without recreating task roots",
@@ -752,6 +757,10 @@ def run_gb_pair(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError("gb-pair requires --doubao-client")
     if args.resume_existing:
         validate_frozen_input(frozen_root=args.frozen_root, asset_root=args.asset_root)
+        if getattr(args, "creative_contract", None) == "v1":
+            marker = read_json_object(args.frozen_root / "g_b_frozen_input_snapshot.json")
+            if marker.get("creative_contract_version") != "creative_contract_v1":
+                raise MeasurementError("--creative-contract v1 requires an immutable Stage 0 creative_contract_v1 marker")
         cold = Path(args.cold_task_dir).resolve(strict=True)
         hot = Path(args.hot_task_dir).resolve(strict=True)
         if cold.is_symlink() or hot.is_symlink() or cold == hot:
@@ -768,6 +777,11 @@ def run_gb_pair(args: argparse.Namespace) -> dict[str, object]:
             "resumed": True,
         }
     else:
+        validate_frozen_input(frozen_root=args.frozen_root, asset_root=args.asset_root)
+        if getattr(args, "creative_contract", None) == "v1":
+            marker = read_json_object(args.frozen_root / "g_b_frozen_input_snapshot.json")
+            if marker.get("creative_contract_version") != "creative_contract_v1":
+                raise MeasurementError("--creative-contract v1 requires an immutable Stage 0 creative_contract_v1 marker")
         pair = prepare_frozen_pair(
             frozen_root=args.frozen_root,
             cold_root=args.cold_task_dir,

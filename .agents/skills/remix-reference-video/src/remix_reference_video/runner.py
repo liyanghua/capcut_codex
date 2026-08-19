@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import CommandResult, ExecutionPlan, PlanValidationError, StagePlan
-from .orchestrator import ProductionOrchestrator, StageAdapter, dag_for_task, default_dag
+from .orchestrator import ProductionOrchestrator, StageAdapter, dag_for_task, dag_version_for_task, default_dag
 from .review_view import ReviewViewBuilder
 from .stage_input_validator import StageInputValidator
 from .storage import (
@@ -1205,6 +1205,7 @@ class ProductionRunner:
                 "skill_version": "2.0.0-alpha.1",
                 "execution_mode": "track-b-production",
                 "run_id": run_id or str(uuid.uuid4()),
+                "production_dag_version": dag_version_for_task(self.task_root),
                 "state_revision": 0,
                 "active_stage": None,
                 "active_command": None,
