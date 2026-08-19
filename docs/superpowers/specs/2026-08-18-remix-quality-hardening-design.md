@@ -2,12 +2,16 @@
 
 ## 1. 文档状态
 
-- 状态：契约修订完成，待实施
+- 状态：基础质量加固已实现并合并主干；历史 legacy run 不追溯启用，创作质量升级待后续实施
 - 日期：2026-08-18
+- 修订日期：2026-08-19
 - 适用对象：V2 Track-B 新任务及隔离 `gb-pair` 验证
 - 关联工作台设计：[业务视频工作台重构设计](2026-08-18-business-video-workbench-design.md)
+- 后续升级设计：[参考视频复刻创作质量升级设计](2026-08-19-reference-remix-creative-quality-upgrade-design.md)
 
 本文只定义 `remix-reference-video` 的生产质量加固，以及这些质量结果如何被审核工作台读取。它不引入 Agent，不改变 `pipeline_state.json` 的审批权威，不解除普通 V2 production lock，也不改变 V1 历史任务的创建时契约。本文中的新产物、字段和规则均属于 V2 契约，必须先通过 schema、registry、输入哈希和回归测试，再进入真实 `gb-pair`。
+
+截至 2026-08-19，本文定义的叙事报告、图片布局报告、共享 contain 布局、DAG/失效闭包、工作台质量投影和增量刷新已实现并合并主干。该实现只对冻结基线携带 `narrative_contract_v1` 的新 V2 任务生效；`tablemat-mix-v2` 等旧冻结任务按 legacy DAG 续跑，其历史成片不能被表述为已经通过本文两个新质量节点。本文解决的是确定性底线，不包含多策略拆解、生成式脚本候选、前三秒/高光和局部 AI 增强，这些由后续升级设计定义。
 
 ## 2. 现状与问题
 
