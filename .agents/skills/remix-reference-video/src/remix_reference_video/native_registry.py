@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .adapters import content_fingerprint
-from .orchestrator import StageAdapter, dag_for_task, default_dag
+from .orchestrator import StageAdapter, creative_dag, dag_for_task, default_dag
 from .stage_input_validator import StageInputValidator
 from .storage import StorageError, atomic_write_json, read_json_object
 
@@ -152,7 +152,7 @@ class NativeAdapterRegistry:
         self.task_root = Path(task_root).resolve(strict=True)
         # Registration accepts the union of known generations. Execution order
         # and exposure still follow the task-selected frozen DAG.
-        self._nodes = {node.node_id: node for node in default_dag()}
+        self._nodes = {node.node_id: node for node in (*default_dag(), *creative_dag())}
         self._adapters: dict[str, StageAdapter] = {}
 
     def _selected_dag(self) -> tuple[object, ...]:

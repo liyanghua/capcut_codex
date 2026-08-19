@@ -172,14 +172,44 @@ def legacy_dag() -> tuple[DAGNode, ...]:
 
 
 def creative_dag() -> tuple[DAGNode, ...]:
-    """Return the creative DAG generation.
-
-    The capability selector is introduced before the creative nodes land.  A
-    creative run therefore remains executable on the hardened graph until the
-    later P1-P3 tasks replace this placeholder with the expanded graph.
-    """
-
-    return default_dag()
+    """Return the creative DAG with strategy, script, and diagnostic nodes."""
+    return (
+        DAGNode("init"),
+        DAGNode("split-reference", ("init",), parallel_safe=True),
+        DAGNode("index-assets", ("init",), parallel_safe=True),
+        DAGNode("build-decomposition-candidates", ("split-reference",)),
+        DAGNode("build-gate1-package", ("build-decomposition-candidates",), (), "gate1"),
+        DAGNode("build-coverage-precheck", ("split-reference", "index-assets"), ("gate1",)),
+        DAGNode("compile-blueprint", ("build-coverage-precheck", "build-gate1-package"), ("gate1",)),
+        DAGNode("compile-mutation-plan", ("compile-blueprint",), ("gate1",)),
+        DAGNode("lint-gate2-package", ("compile-mutation-plan",), ("gate1",), "gate2"),
+        DAGNode("build-coverage-authoritative", ("lint-gate2-package",), ("gate2",)),
+        DAGNode("match-assets", ("build-coverage-authoritative",), ("gate2",)),
+        DAGNode("build-material-selection-package", ("match-assets",), ("gate2",), "gate3_material_selection"),
+        DAGNode("freeze-fragment-plan", ("build-material-selection-package",), ("gate3_material_selection",)),
+        DAGNode("validate-script-evidence", ("freeze-fragment-plan",), ("gate3_material_selection",), "gate3_evidence_closure"),
+        DAGNode("summarize-gate3", ("validate-script-evidence",), ("gate3_material_selection", "gate3_evidence_closure")),
+        DAGNode("build-narrative-coherence", ("summarize-gate3",), ("gate3",)),
+        DAGNode("generate-script-candidates", ("build-narrative-coherence",), ("gate3",)),
+        DAGNode("validate-script-candidates", ("generate-script-candidates",), ("gate3",)),
+        DAGNode("select-script-candidate", ("validate-script-candidates",), ("gate3",)),
+        DAGNode("build-production-script", ("select-script-candidate",), ("gate3",), parallel_safe=True),
+        DAGNode("materialize-approved-broad", ("summarize-gate3",), ("gate3",), parallel_safe=True),
+        DAGNode("validate-visual-layout", ("materialize-approved-broad",), ("gate3",), parallel_safe=True),
+        DAGNode("voice-preflight", ("build-production-script", "validate-visual-layout"), ("gate3",)),
+        DAGNode("build-gate4-pre-package", ("voice-preflight",), ("gate3",), "gate4_pre_generation"),
+        DAGNode("generate-voice", ("build-gate4-pre-package",), ("gate4_pre_generation",)),
+        DAGNode("build-reconstruction-timeline", ("generate-voice", "materialize-approved-broad"), ("gate4_pre_generation",)),
+        DAGNode("build-gate4-post-package", ("build-reconstruction-timeline",), ("gate4_pre_generation",), "gate4_post_generation"),
+        DAGNode("summarize-gate4", ("build-gate4-post-package",), ("gate4_pre_generation", "gate4_post_generation")),
+        DAGNode("render-proxy", ("summarize-gate4",), ("gate4",)),
+        DAGNode("validate-shot-quality", ("render-proxy",), ("gate4",)),
+        DAGNode("validate-proxy-boundaries", ("validate-shot-quality",), ("gate4",)),
+        DAGNode("render-final", ("validate-proxy-boundaries",), ("gate4",)),
+        DAGNode("build-final-content-diagnostic", ("render-final",), ("gate4",)),
+        DAGNode("build-gate5-package", ("build-final-content-diagnostic",), ("gate4",), "gate5"),
+        DAGNode("archive-approved", ("build-gate5-package",), ("gate5",)),
+    )
 
 
 def dag_version_for_task(task_root: Path) -> str:
