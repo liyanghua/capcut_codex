@@ -21,14 +21,32 @@ _GATE5_FILES = (
     "render_report.json",
     "jianying_import_manifest.json",
 )
-_QUALITY_REPORT_TYPES = frozenset({"narrative_coherence_report", "visual_layout_report"})
+_CREATIVE_ARTIFACT_TYPES = frozenset(
+    {
+        "narrative_coherence_report",
+        "visual_layout_report",
+        "decomposition_bundle",
+        "creative_objective",
+        "remix_strategy_candidates",
+        "script_candidates",
+        "script_candidate_validation_report",
+        "shot_quality_report",
+        "enhancement_plan",
+        "final_content_diagnostic_report",
+    }
+)
 _QUALITY_LIFECYCLES = frozenset({"ready", "stale"})
+_CREATIVE_SCHEMA_IDS = {
+    artifact_type: f"urn:capcut:remix-reference-video:artifact:{artifact_type.replace('_', '-')}"
+    for artifact_type in _CREATIVE_ARTIFACT_TYPES
+}
 _QUALITY_STATUSES = frozenset({"passed", "blocked", "manual_review"})
 _RESERVED_APPROVAL_KEYS = frozenset(
     {
         "approval",
         "approvals",
         "approval_records",
+        "approval_status",
         "decision",
         "decisions",
         "gate_status",
@@ -98,7 +116,10 @@ class ArtifactValidator:
         except StorageError as error:
             return ValidationResult((str(error),))
         artifact_type = value.get("artifact_type")
-        if artifact_type in _QUALITY_REPORT_TYPES:
+        if artifact_type in _CREATIVE_ARTIFACT_TYPES:
+            expected_schema_id = _CREATIVE_SCHEMA_IDS[artifact_type]
+            if value.get("schema_id") != expected_schema_id:
+                errors.append(f"creative artifact schema_id must be {expected_schema_id!r}")
             lifecycle = value.get("lifecycle_status")
             if lifecycle not in _QUALITY_LIFECYCLES:
                 errors.append(f"quality report lifecycle_status must be one of {sorted(_QUALITY_LIFECYCLES)}, found {lifecycle!r}")
@@ -110,7 +131,8 @@ class ArtifactValidator:
                     if not isinstance(name, str) or not name or not self._is_sha256(digest):
                         errors.append(f"quality report input hash is invalid: {name!r}")
                         break
-            if value.get("status") not in _QUALITY_STATUSES:
+            status = value.get("status")
+            if status is not None and status not in _QUALITY_STATUSES and not (artifact_type == "enhancement_plan" and status in {"ready", "failed"}):
                 errors.append(f"quality report status must be one of {sorted(_QUALITY_STATUSES)}, found {value.get('status')!r}")
             for key_path in _find_reserved_approval_keys(value):
                 errors.append(f"quality report must not carry approval field: {key_path}")

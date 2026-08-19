@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:creative-objective",
+  "title": "Creative Objective",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "objectives"],
+  "properties": {
+    "artifact_type": {"const": "creative_objective"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:creative-objective"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "objective_id": {"type": "string", "minLength": 1},
+    "objective_version": {"type": "string", "minLength": 1},
+    "objective_contract_version": {"const": "creative_objective_v1"},
+    "platform": {"type": "string", "minLength": 1},
+    "audience": {"type": "string", "minLength": 1},
+    "product": {"type": "string", "minLength": 1},
+    "duration_envelope": {"type": "object", "properties": {"min_seconds": {"type": "number", "minimum": 0}, "max_seconds": {"type": "number", "exclusiveMinimum": 0}}, "additionalProperties": false},
+    "core_message": {"type": "string"},
+    "desired_action": {"type": "string"},
+    "opening_hook_hypothesis": {"type": "string"},
+    "approved_claims": {"type": "array", "items": {"type": "string"}},
+    "forbidden_claims": {"type": "array", "items": {"type": "string"}},
+    "product_appearance_target_seconds": {"type": ["number", "null"], "minimum": 0},
+    "cta": {"type": "string"},
+    "objectives": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["objective_id", "weight", "required"], "properties": {"objective_id": {"type": "string", "minLength": 1}, "weight": {"type": "number", "minimum": 0, "maximum": 1}, "required": {"type": "boolean"}, "description": {"type": "string"}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:script-candidate-validation-report",
+  "title": "Script Candidate Validation Report",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "candidates"],
+  "properties": {
+    "artifact_type": {"const": "script_candidate_validation_report"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:script-candidate-validation-report"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "validation_policy_version": {"type": "string"},
+    "candidates": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["script_candidate_id", "status"], "properties": {"script_candidate_id": {"type": "string", "minLength": 1}, "status": {"enum": ["passed", "blocked", "manual_review", "rejected"]}, "reason_codes": {"type": "array", "items": {"type": "string"}}, "objective_coverage": {"type": "array", "items": {"type": "string"}}, "budget_margin_seconds": {"type": "number"}, "checks": {"type": "object", "additionalProperties": {"enum": ["passed", "blocked", "manual_review"]}}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

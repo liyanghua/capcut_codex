@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:remix-strategy-candidates",
+  "title": "Remix Strategy Candidates",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "candidates"],
+  "properties": {
+    "artifact_type": {"const": "remix_strategy_candidates"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:remix-strategy-candidates"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "objective_id": {"type": "string"},
+    "selected_decomposition_id": {"type": "string"},
+    "candidates": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "object", "required": ["strategy_id", "status"], "properties": {"strategy_id": {"enum": ["structure_fidelity_v1", "conversion_adaptation_v1", "asset_constrained_v1", "balanced_remix_v1"]}, "status": {"type": "string"}, "preserve": {"type": "array", "items": {"type": "string"}}, "replace": {"type": "array", "items": {"type": "string"}}, "compress": {"type": "array", "items": {"type": "string"}}, "expand": {"type": "array", "items": {"type": "string"}}, "reorder": {"type": "array", "items": {"type": "string"}}, "fallback": {"type": "array", "items": {"type": "string"}}, "coverage_estimate": {"type": "number", "minimum": 0, "maximum": 1}, "feasibility_estimate": {"type": "number", "minimum": 0, "maximum": 1}, "reference_deviation_estimate": {"type": "number", "minimum": 0, "maximum": 1}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

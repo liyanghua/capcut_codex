@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:enhancement-plan",
+  "title": "Shot Enhancement Plan",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "status", "shot_id"],
+  "properties": {
+    "artifact_type": {"const": "enhancement_plan"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:enhancement-plan"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["ready", "failed"]},
+    "shot_id": {"type": "string", "minLength": 1},
+    "objective_id": {"type": "string"},
+    "modification_intent": {"type": "string"},
+    "source_material_ids": {"type": "array", "items": {"type": "string"}},
+    "provider": {"type": "string"},
+    "model": {"type": "string"},
+    "prompt_template_version": {"type": "string"},
+    "candidates": {"type": "array", "items": {"type": "object", "required": ["candidate_id", "path"], "properties": {"candidate_id": {"type": "string"}, "path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "status": {"type": "string"}}, "additionalProperties": false}},
+    "failure_reason": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

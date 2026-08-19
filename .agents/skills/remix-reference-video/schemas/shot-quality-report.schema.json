@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:shot-quality-report",
+  "title": "Shot Quality Report",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "status", "shots"],
+  "properties": {
+    "artifact_type": {"const": "shot_quality_report"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:shot-quality-report"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["passed", "blocked", "manual_review"]},
+    "video_version_id": {"type": "string"},
+    "shots": {"type": "array", "items": {"type": "object", "required": ["shot_id"], "properties": {"shot_id": {"type": "string", "minLength": 1}, "status": {"enum": ["passed", "blocked", "manual_review"]}, "action_results": {"type": "array", "items": {"type": "object", "required": ["action_id", "status"], "properties": {"action_id": {"type": "string"}, "status": {"enum": ["passed", "blocked", "manual_review", "not_measured"]}, "evidence_ref": {"type": ["string", "null"]}}, "additionalProperties": false}}, "first_three_seconds": {"type": "boolean"}, "script_visual_coherence": {"enum": ["passed", "blocked", "manual_review", "not_measured"]}, "consistency": {"enum": ["passed", "blocked", "manual_review", "not_measured"]}, "highlight_candidate": {"type": "boolean"}, "earliest_recovery_gate": {"type": ["string", "null"]}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

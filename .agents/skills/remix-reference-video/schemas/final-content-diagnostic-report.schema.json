@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:final-content-diagnostic-report",
+  "title": "Final Content Diagnostic Report",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "implementation_version", "lifecycle_status", "input_hashes", "status", "checks"],
+  "properties": {
+    "artifact_type": {"const": "final_content_diagnostic_report"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:final-content-diagnostic-report"},
+    "schema_version": {"const": "1.0.0"},
+    "contract_version": {"const": "2.0.0-alpha.1"},
+    "skill_version": {"const": "2.0.0-alpha.1"},
+    "implementation_version": {"type": "string", "minLength": 1},
+    "lifecycle_status": {"enum": ["ready", "stale"]},
+    "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["passed", "blocked", "manual_review"]},
+    "video_version_id": {"type": "string"},
+    "checks": {"type": "array", "items": {"type": "object", "required": ["check_id", "status"], "properties": {"check_id": {"type": "string", "minLength": 1}, "status": {"enum": ["passed", "blocked", "manual_review", "not_measured"]}, "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1}, "evidence_refs": {"type": "array", "items": {"type": "string"}}, "earliest_recovery_gate": {"type": ["string", "null"]}, "business_explanation": {"type": "string"}}, "additionalProperties": false}},
+    "first_three_seconds": {"type": "object", "properties": {"status": {"enum": ["passed", "blocked", "manual_review", "not_measured"]}, "evidence_ref": {"type": ["string", "null"]}}, "additionalProperties": false},
+    "objective_coverage": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}},
+    "blocked_check_ids": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}
