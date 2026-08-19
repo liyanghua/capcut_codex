@@ -203,9 +203,9 @@
       const cls = stage.status === "approved" ? "done" : _RISK_STAGE_STATUSES.has(stage.status) ? "blocked" : isCurrent ? "current" : "future";
       const label = stageStatus[stage.status] || "需确认";
       const subs = (stage.substeps || []).map((sub) => `<span class="substep ${sub.status}">${esc(substepLabels[sub.gate_id] || sub.gate_id)} · ${esc(substepStatus[sub.status] || sub.status)}</span>`).join("");
-      return `<li class="stage-step ${cls}" data-open="${isCurrent ? "1" : "0"}">
-        <button type="button" class="stage-toggle" aria-expanded="${isCurrent ? "true" : "false"}"><span class="stage-index">${index + 1}</span><span class="stage-info"><span class="stage-label">${esc(stage.business_label)}</span><span class="stage-status">${esc(label)}</span></span></button>
-        <div class="stage-detail" ${isCurrent ? "" : "hidden"}>${subs || `<span class="empty-rail">暂无子步骤</span>`}</div>
+      return `<li class="stage-step ${cls}" data-open="1">
+        <button type="button" class="stage-toggle" aria-expanded="true"><span class="stage-index">${index + 1}</span><span class="stage-info"><span class="stage-label">${esc(stage.business_label)}</span><span class="stage-status">${esc(label)}</span></span></button>
+        <div class="stage-detail">${subs || `<span class="empty-rail">暂无子步骤</span>`}</div>
       </li>`;
     }).join("");
     document.querySelectorAll(".stage-toggle").forEach((button) => button.addEventListener("click", () => {

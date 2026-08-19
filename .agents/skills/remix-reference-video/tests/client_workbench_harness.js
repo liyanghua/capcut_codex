@@ -159,6 +159,8 @@ eval(clientSource);
   }
   assertContains(stepper, "substep", "current stage shows Gate substeps");
   assertContains(stepper, "stage-step", "stepper stages render");
+  assert((stepper.match(/class="stage-detail"/g) || []).length === (stage.process?.stages || []).length, "all business stages expose their substeps");
+  assert(!stepper.includes('class="stage-detail" hidden'), "business stage details are visible by default");
 
   // 10. Stage content for Gate 4/5 renders in business language.
   const stageContent = elementFor("#stage-content").innerHTML;
