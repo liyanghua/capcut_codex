@@ -444,13 +444,27 @@ def _gate4_pre_package(
     report = read_json_object(preflight)
     if report.get("preflight_status") != "passed":
         raise ValueError("voice preflight must pass before Gate 4 generation approval")
+    hashes = {
+        candidate.name: _sha256(candidate),
+        preflight.name: _sha256(preflight),
+    }
+    bindings: dict[str, object] = {}
+    if _creative_run(root):
+        for name in ("script_candidates.json", "script_candidate_validation_report.json"):
+            path = root / name
+            if path.is_file() and not path.is_symlink():
+                hashes[name] = _sha256(path)
+        selected = _selected_script_candidate(root, candidate)
+        if selected is not None:
+            bindings["selected_script_candidate_id"] = selected
+            bindings["script_candidate_validation_report.json_sha256"] = hashes.get(
+                "script_candidate_validation_report.json"
+            )
     return _package(
         root,
         "gate4_pre_generation",
-        {
-            candidate.name: _sha256(candidate),
-            preflight.name: _sha256(preflight),
-        },
+        hashes,
+        **({"creative_bindings": bindings} if bindings else {}),
     )
 
 
@@ -559,13 +573,40 @@ def _archive(root: Path, final_root: Path) -> Mapping[str, object]:
     return {"path": str(path)}
 
 
-def _package(root: Path, gate_id: str, hashes: Mapping[str, str]) -> Mapping[str, object]:
+def _package(
+    root: Path,
+    gate_id: str,
+    hashes: Mapping[str, str],
+    **extra: object,
+) -> Mapping[str, object]:
     return {
         "artifact_type": "gate_review_package", "schema_id": "urn:capcut:remix-reference-video:artifact:gate-review-package",
         "schema_version": "1.0.0", "contract_version": "2.0.0-alpha.1", "skill_version": "2.0.0-alpha.1",
         "gate_id": gate_id, "run_id": _state(root)["run_id"], "state_revision": _state(root)["state_revision"],
-        "created_at": _now(), "input_hashes": dict(hashes),
+        "created_at": _now(), "input_hashes": dict(hashes), **extra,
     }
+
+
+def _creative_run(root: Path) -> bool:
+    snapshot = root / "g_b_frozen_input_snapshot.json"
+    if not snapshot.is_file() or snapshot.is_symlink():
+        return False
+    try:
+        return read_json_object(snapshot).get("creative_contract_version") == "creative_contract_v1"
+    except (OSError, StorageError, TypeError, ValueError):
+        return False
+
+
+def _selected_script_candidate(root: Path, candidate: Path) -> str | None:
+    try:
+        value = read_json_object(candidate)
+    except (OSError, StorageError, TypeError, ValueError):
+        return None
+    for key in ("selected_script_candidate_id", "script_candidate_id"):
+        selected = value.get(key)
+        if isinstance(selected, str) and selected:
+            return selected
+    return None
 
 
 def _state(root: Path) -> dict[str, object]:

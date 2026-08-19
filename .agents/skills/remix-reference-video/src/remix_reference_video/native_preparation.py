@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 from .adapters.mutation import ControlledMutationAdapter
 from .adapters.retrieval import RetrievalAdapter
 from .native_registry import NativeAdapterRegistry, NativeStageAdapter
-from .storage import read_json_object
+from .storage import StorageError, read_json_object
 
 
 def register_preparation_adapters(
@@ -75,13 +76,48 @@ def _gate2_package(
     root: Path, baseline: Path, mutation: Path, state_path: Path
 ) -> Mapping[str, object]:
     state = read_json_object(state_path)
-    return ControlledMutationAdapter().build_gate2_package(
+    package = ControlledMutationAdapter().build_gate2_package(
         content_baseline_path=baseline,
         mutation_plan_path=mutation,
         run_id=str(state["run_id"]),
         state_revision=int(state["state_revision"]),
         created_at=datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
     )
+    snapshot = root / "g_b_frozen_input_snapshot.json"
+    if snapshot.is_file() and not snapshot.is_symlink():
+        try:
+            creative = read_json_object(snapshot).get("creative_contract_version") == "creative_contract_v1"
+        except (OSError, StorageError, ValueError, TypeError):
+            creative = False
+        if creative:
+            optional = (
+                "creative_objective.json",
+                "remix_strategy_candidates.json",
+                "coverage_precheck.json",
+            )
+            for name in optional:
+                path = root / name
+                if path.is_file() and not path.is_symlink():
+                    package["input_hashes"][name] = _file_hash(path)
+            candidates_path = root / "remix_strategy_candidates.json"
+            if candidates_path.is_file() and not candidates_path.is_symlink():
+                candidates = read_json_object(candidates_path).get("candidates")
+                if isinstance(candidates, list):
+                    passed = next(
+                        (row for row in candidates if isinstance(row, Mapping) and row.get("status") == "passed"),
+                        None,
+                    )
+                    if isinstance(passed, Mapping) and isinstance(passed.get("strategy_id"), str):
+                        package["creative_bindings"] = {
+                            "selected_remix_strategy_id": passed["strategy_id"],
+                            "remix_strategy_candidates.json_sha256": package["input_hashes"].get("remix_strategy_candidates.json"),
+                        }
+    return package
+
+
+def _file_hash(path: Path) -> str:
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 __all__ = ["register_preparation_adapters"]

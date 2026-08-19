@@ -128,6 +128,8 @@ class ApprovalService:
         if created_at > now:
             raise ApprovalError("review package timestamp is out of order")
         self._verify_inputs(package.get("input_hashes"))
+        if self._is_creative_task() and decision["decision"] == "approved":
+            self._verify_creative_selection(gate_id, decision, package)
         if decision["decision"] == "approved":
             self._verify_predecessors(state, gate_id)
         approved_at = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -244,6 +246,73 @@ class ApprovalService:
             path = self._task_file(self.root / relative, "review input")
             if self._sha256(path) != expected:
                 raise ApprovalError(f"review input hash mismatch: {relative}")
+
+    def _is_creative_task(self) -> bool:
+        snapshot = self.root / "g_b_frozen_input_snapshot.json"
+        if not snapshot.is_file() or snapshot.is_symlink():
+            return False
+        try:
+            return read_json_object(snapshot).get("creative_contract_version") == "creative_contract_v1"
+        except (OSError, StorageError, TypeError, ValueError):
+            return False
+
+    def _verify_creative_selection(
+        self,
+        gate_id: str,
+        decision: Mapping[str, object],
+        package: Mapping[str, object],
+    ) -> None:
+        strategy = decision.get("strategy")
+        if not isinstance(strategy, Mapping):
+            raise ApprovalError("creative approval strategy is required")
+        if gate_id == "gate1":
+            selected_key, artifact_name, id_key = (
+                "selected_decomposition_id",
+                "decomposition_bundle.json",
+                "decomposition_id",
+            )
+        elif gate_id == "gate2":
+            selected_key, artifact_name, id_key = (
+                "selected_remix_strategy_id",
+                "remix_strategy_candidates.json",
+                "strategy_id",
+            )
+        elif gate_id == "gate4_pre_generation":
+            selected_key, artifact_name, id_key = (
+                "selected_script_candidate_id",
+                "script_candidate_validation_report.json",
+                "script_candidate_id",
+            )
+        else:
+            return
+        selected = strategy.get(selected_key)
+        if not isinstance(selected, str) or not selected.strip():
+            raise ApprovalError(f"{selected_key} must be a single non-empty string")
+        hashes = package.get("input_hashes")
+        if not isinstance(hashes, Mapping) or artifact_name not in hashes:
+            raise ApprovalError(f"{gate_id} package must bind {artifact_name}")
+        expected_hash = hashes.get(artifact_name)
+        path = self._task_file(self.root / artifact_name, "creative candidate artifact")
+        if self._sha256(path) != expected_hash:
+            raise ApprovalError(f"creative candidate hash mismatch: {artifact_name}")
+        artifact = read_json_object(path)
+        rows = artifact.get("candidates")
+        if not isinstance(rows, list):
+            raise ApprovalError(f"{artifact_name} candidates are required")
+        matching = [row for row in rows if isinstance(row, Mapping) and row.get(id_key) == selected]
+        if not matching:
+            raise ApprovalError(f"{selected_key} is not present in {artifact_name}")
+        if gate_id == "gate4_pre_generation":
+            if matching[0].get("status") != "passed":
+                raise ApprovalError("selected script candidate must be passed")
+        binding = package.get("creative_bindings")
+        if isinstance(binding, Mapping):
+            bound_id = binding.get(selected_key)
+            if bound_id is not None and bound_id != selected:
+                raise ApprovalError(f"{selected_key} does not match review package binding")
+            bound_hash = binding.get(f"{artifact_name}_sha256")
+            if bound_hash is not None and bound_hash != expected_hash:
+                raise ApprovalError(f"{artifact_name} binding hash is stale")
 
     def _verify_predecessors(self, state: Mapping[str, object], gate_id: str) -> None:
         gates = state.get("gate_status")
