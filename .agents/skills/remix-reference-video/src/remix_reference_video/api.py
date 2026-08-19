@@ -202,6 +202,14 @@ def create_app(
             package = task_root / "gate_review_packages" / f"{gate_id}.json"
             if package.is_file() and not package.is_symlink() and read_json_object(package).get("state_revision") == revision:
                 return gate_id
+        # Once Gate 5 has been approved, the approval transaction advances the
+        # state revision after the package was sealed. Keep the latest final
+        # review visible instead of turning an otherwise complete run into a
+        # 409 with no current gate.
+        if all(gates.get(gate_id) == "approved" for gate_id in CANONICAL_GATE_ORDER):
+            final_package = task_root / "gate_review_packages" / "gate5.json"
+            if final_package.is_file() and not final_package.is_symlink():
+                return "gate5"
         raise HTTPException(status_code=409, detail={"error_code":"review_not_ready","message":"no current Gate review package"})
 
     def sse(notices: list[dict[str, str]]) -> Any:
