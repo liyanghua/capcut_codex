@@ -1,6 +1,6 @@
 (() => {
   const runId = document.body.dataset.runId;
-  const state = { workspace: null, review: null, session: null, selected: null, media: null, preview: null, request: null, reloadPending: false };
+  const state = { workspace: null, review: null, session: null, selected: null, media: null, preview: null, request: null, reloadPending: false, readOnly: true, readOnlyLabel: "正在确认审核权限" };
   const $ = (selector) => document.querySelector(selector);
   const esc = (value) => String(value ?? "").replace(/[&<>\"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
   const api = (path, options = {}) => fetch(`/api/v1/runs/${encodeURIComponent(runId)}${path}`, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options }).then(async (response) => {
@@ -292,22 +292,45 @@
     renderStepper();
     renderStageContent();
     renderQualityChecks();
-    const approve = document.querySelector('[data-action="approve"]');
-    approve.disabled = decision.approval_eligibility !== true;
+    const decisionReady = !state.readOnly && Boolean(state.review) && Boolean(state.session);
+    document.querySelector('[data-action="approve"]').disabled = !decisionReady || decision.approval_eligibility !== true;
+    document.querySelector('[data-action="request_changes"]').disabled = !decisionReady;
+    document.querySelector('[data-action="reject"]').disabled = !decisionReady;
+    $("#decision-note").disabled = !decisionReady;
     $("#diagnostics-body").textContent = JSON.stringify({ run_id: view.run_id, state_revision: view.state_revision, package_revision: view.package_revision, current_gate: view.current_gate, preview_mode: view.preview?.mode, execution: view.process?.execution || [], artifacts: view.artifacts || [] }, null, 2);
   }
 
   function openSession() { return api("/review-session", { method: "POST", body: JSON.stringify({ gate_id: state.workspace.current_gate }) }).then((session) => { state.session = session; }); }
 
-  async function load() {
-    state.workspace = await api("/workspace");
-    state.review = await api("/review");
-    await openSession();
+  async function loadReviewContext() {
+    try {
+      state.review = await api("/review");
+      await openSession();
+      state.readOnly = false;
+      state.readOnlyLabel = "";
+      return true;
+    } catch (error) {
+      state.review = null;
+      state.session = null;
+      state.readOnly = true;
+      state.readOnlyLabel = error.response?.status === 409 ? "只读 · 审核包已过期" : "只读 · 审核服务不可用";
+      return false;
+    }
+  }
+
+  function renderWorkspace() {
     renderAssistant();
     renderRail();
     renderTimeline();
+  }
+
+  async function load() {
+    state.workspace = await api("/workspace");
+    renderWorkspace();
     renderPreview(state.workspace.preview?.media_ref);
-    $("#connection-status").textContent = "已连接";
+    await loadReviewContext();
+    renderAssistant();
+    $("#connection-status").textContent = state.readOnly ? state.readOnlyLabel : "已连接";
     connectEvents();
   }
 
@@ -320,10 +343,9 @@
     const selected = state.selected ? { type: state.selected.type, id: state.selected.id } : null;
     const detailOpen = $("#object-detail").hidden === false;
     state.workspace = current;
-    state.review = await api("/review");
-    renderAssistant();
-    renderRail();
-    renderTimeline();
+    await loadReviewContext();
+    renderWorkspace();
+    $("#connection-status").textContent = state.readOnly ? state.readOnlyLabel : "已连接";
     if (current?.preview?.media_ref !== previousPreviewRef) {
       renderPreview(current?.preview?.media_ref);
     } else if (state.media && Number.isFinite(currentTime)) {
@@ -349,7 +371,7 @@
 
   function connectEvents() {
     const events = new EventSource(`/api/v1/runs/${encodeURIComponent(runId)}/events`);
-    events.onopen = () => { $("#connection-status").textContent = "已连接"; };
+    events.onopen = () => { $("#connection-status").textContent = state.readOnly ? state.readOnlyLabel : "已连接"; };
     events.addEventListener("revision", async (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -358,10 +380,11 @@
         if (Number(current.state_revision) > Number(state.workspace.state_revision)) await refreshWorkspace(current);
       } catch (_) {}
     });
-    events.onerror = () => { $("#connection-status").textContent = "自动同步"; };
+    events.onerror = () => { $("#connection-status").textContent = state.readOnly ? state.readOnlyLabel : "自动同步"; };
   }
 
   async function decide(action) {
+    if (state.readOnly || !state.session || !state.review) { toast(state.readOnlyLabel || "当前仅可查看"); return; }
     if (action === "request_changes") { openChangeDialog(); return; }
     const note = $("#decision-note").value.trim(); if (action === "reject" && !note) { toast("驳回需要填写业务原因"); return; }
     const identity = state.session.review_identity;

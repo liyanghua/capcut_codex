@@ -87,7 +87,7 @@ class WorkbenchClientContractTests(unittest.TestCase):
             path.write_bytes(b"x")
         self.store.update_state(lambda state: state | {"state_revision": 9})
 
-    def _run_harness(self, view: dict[str, object]) -> str:
+    def _run_harness(self, view: dict[str, object], *, stale_review: bool = False) -> str:
         node = shutil.which("node")
         if not node:
             self.skipTest("node runtime is unavailable")
@@ -101,6 +101,8 @@ class WorkbenchClientContractTests(unittest.TestCase):
         (fixtures / "review.json").write_text(json.dumps({"impact_context": {"decision_scope_ids": []}}), encoding="utf-8")
         (fixtures / "session.json").write_text(json.dumps({"session_id": "s1", "review_identity": {"review_package_hash": "h", "state_revision": 9}}), encoding="utf-8")
         env = {**os.environ, "WORKBENCH_FIXTURES": str(fixtures), "WORKBENCH_JS": str(_CLIENT_JS)}
+        if stale_review:
+            env["WORKBENCH_REVIEW_STALE"] = "1"
         result = subprocess.run([node, str(_HARNESS)], capture_output=True, text=True, env=env, timeout=60)
         self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
         return result.stdout
@@ -119,6 +121,10 @@ class WorkbenchClientContractTests(unittest.TestCase):
         view = WorkbenchWorkspaceBuilder(self.root).build("gate1")
         self.assertEqual(view["storyboard"]["section_states"]["elements"], "pending_gate2")
         self.assertIn("client contract OK", self._run_harness(view))
+
+    def test_stale_review_package_keeps_workspace_visible_in_read_only_mode(self) -> None:
+        view = WorkbenchWorkspaceBuilder(self.root).build("gate5")
+        self.assertIn("client contract OK", self._run_harness(view, stale_review=True))
 
 
 if __name__ == "__main__":

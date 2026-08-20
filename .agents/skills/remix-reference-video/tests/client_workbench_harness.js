@@ -19,6 +19,7 @@ const session = readFixture("session.json");
 const workspacePath = path.join(fixturesDir, "workspace2.json");
 const hasSecondWorkspace = fs.existsSync(workspacePath);
 const workspace2 = hasSecondWorkspace ? JSON.parse(fs.readFileSync(workspacePath, "utf-8")) : null;
+const staleReview = process.env.WORKBENCH_REVIEW_STALE === "1";
 
 const failures = [];
 const assert = (condition, message) => { if (!condition) failures.push(message); };
@@ -57,14 +58,23 @@ global.EventSource = class {
 global.__reloadCalls = 0;
 global.location = { reload: () => { global.__reloadCalls += 1; } };
 
-const jsonResponse = (payload) => ({ ok: true, headers: { get: () => "application/json" }, json: async () => payload, text: async () => JSON.stringify(payload) });
+const jsonResponse = (payload, options = {}) => ({
+  ok: options.ok !== false,
+  status: options.status || 200,
+  headers: { get: () => "application/json" },
+  json: async () => payload,
+  text: async () => JSON.stringify(payload),
+});
 let workspaceCalls = 0;
 global.fetch = async (url) => {
   if (String(url).endsWith("/workspace")) {
     workspaceCalls += 1;
     return jsonResponse(workspaceCalls === 1 || !workspace2 ? workspace : workspace2);
   }
-  if (String(url).endsWith("/review")) return jsonResponse(review);
+  if (String(url).endsWith("/review")) {
+    if (staleReview) return jsonResponse({ detail: { message: "review package revision is stale" } }, { ok: false, status: 409 });
+    return jsonResponse(review);
+  }
   if (String(url).endsWith("/review-session")) return jsonResponse(session);
   throw new Error(`unexpected fetch: ${url}`);
 };
@@ -85,6 +95,14 @@ eval(clientSource);
   const stage = hook.state.workspace;
   const previewMedia = elementFor("#preview-media");
   const centerBefore = previewMedia.innerHTML;
+
+  if (staleReview) {
+    assert(elementFor("#business-stage").textContent !== "", "stale review package still renders the workspace");
+    assert(elementFor("#connection-status").textContent.includes("只读"), "stale review package reports read-only mode");
+    for (const action of ["approve", "request_changes", "reject"]) {
+      assert(elementFor(`[data-action="${action}"]`).disabled === true, `stale review package disables ${action}`);
+    }
+  }
 
   // 1. Fixed stage-main preview renders on load and is never replaced.
   const previewRef = stage.preview?.media_ref;
@@ -200,7 +218,7 @@ eval(clientSource);
   assertContains(diagnostics, "artifacts", "diagnostics include business artifacts");
 
   // 14. Higher state_revision re-renders without location.reload and keeps selection/detail.
-  if (hasSecondWorkspace) {
+  if (hasSecondWorkspace && !staleReview) {
     const shotId = stage.storyboard?.shots?.[0]?.shot_id;
     if (shotId) hook.selectObject("shot", shotId);
     const questionBefore = elementFor("#decision-question").textContent;
