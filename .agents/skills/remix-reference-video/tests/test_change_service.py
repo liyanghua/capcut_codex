@@ -237,12 +237,13 @@ class ChangeServiceTests(unittest.TestCase):
     def test_impact_stale_stages_match_dag_downstream_closure(self) -> None:
         from remix_reference_video.change_service import _IMPACTS, dag_downstream_closure
 
+        creative_only = {"build-material-evidence-requirements"}
         for change_type, impact in _IMPACTS.items():
             if not isinstance(impact, dict) or not impact.get("stale_stages"):
                 continue
             stages = list(impact["stale_stages"])
             with self.subTest(change_type=change_type):
-                self.assertEqual(set(stages), set(dag_downstream_closure([stages[0]])), change_type)
+                self.assertEqual(set(stages) - creative_only, set(dag_downstream_closure([stages[0]])), change_type)
 
     def test_quality_nodes_appear_in_quality_related_impacts(self) -> None:
         from remix_reference_video.change_service import _IMPACTS
@@ -255,6 +256,16 @@ class ChangeServiceTests(unittest.TestCase):
         self.assertIn("visual_layout_report.json", _IMPACTS["material"]["artifacts_to_regenerate"])
         self.assertNotIn("build-narrative-coherence", _IMPACTS["voice"]["stale_stages"])
         self.assertNotIn("validate-visual-layout", _IMPACTS["rerecord"]["stale_stages"])
+
+    def test_gate2_changes_invalidate_material_evidence_contracts(self) -> None:
+        from remix_reference_video.change_service import _IMPACTS
+
+        for change_type in ("claim_scope", "structural"):
+            with self.subTest(change_type=change_type):
+                impact = _IMPACTS[change_type]
+                self.assertIn("build-material-evidence-requirements", impact["stale_stages"])
+                self.assertIn("material_evidence_requirements.json", impact["artifacts_to_regenerate"])
+                self.assertIn("material_evidence_annotations.json", impact["artifacts_to_regenerate"])
 
     def test_script_candidate_select_requires_passed_candidate_and_stales_gate4(self) -> None:
         session = self._switch_to_gate4_pre()

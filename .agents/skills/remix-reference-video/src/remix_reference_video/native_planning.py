@@ -11,8 +11,9 @@ from .adapters.decomposition import DecompositionAdapter
 from .adapters.mutation import ControlledMutationAdapter
 from .adapters.retrieval import RetrievalAdapter
 from .decomposition_handoff import build_gate1_package, materialize_approved_decomposition
+from .material_evidence import build_material_evidence_requirements, merge_material_evidence
 from .native_registry import NativeAdapterRegistry, NativeStageAdapter
-from .storage import read_json_object
+from .storage import atomic_write_json, read_json_object
 
 
 def register_planning_adapters(
@@ -102,15 +103,35 @@ def register_planning_adapters(
         )
     )
 
+    creative = False
+    snapshot = root / "g_b_frozen_input_snapshot.json"
+    if snapshot.is_file() and not snapshot.is_symlink():
+        creative = read_json_object(snapshot).get("creative_contract_version") == "creative_contract_v1"
+    evidence_requirements = root / "material_evidence_requirements.json"
+    evidence_annotations = root / "material_evidence_annotations.json"
+    evidence_profiles = root / "derived" / "material_evidence_profiles.json"
+    if creative:
+        registry.register(NativeStageAdapter(
+            root,
+            execution_stage_id="build-material-evidence-requirements",
+            implementation_version="material-evidence-v1",
+            required_inputs=(baseline_output, profiles, state_file),
+            declared_outputs=(evidence_requirements, evidence_profiles),
+            execute_fn=lambda: _build_material_evidence(
+                baseline_output, profiles, evidence_annotations, evidence_requirements, evidence_profiles
+            ),
+            domain_managed_outputs=True,
+        ))
+    retrieval_profiles = evidence_profiles if creative else profiles
     coverage_output = root / "coverage_report.json"
     registry.register(
         NativeStageAdapter(
             root,
             execution_stage_id="build-coverage-authoritative",
             implementation_version="retrieval-coverage-native-v1",
-            required_inputs=(baseline_output, profiles, state_file),
+            required_inputs=(baseline_output, retrieval_profiles, state_file),
             declared_outputs=(coverage_output,),
-            execute_fn=lambda _payload: _build_coverage(baseline_output, profiles, state_file),
+            execute_fn=lambda _payload: _build_coverage(baseline_output, retrieval_profiles, state_file),
         )
     )
 
@@ -120,12 +141,52 @@ def register_planning_adapters(
             root,
             execution_stage_id="match-assets",
             implementation_version="retrieval-match-native-v1",
-            required_inputs=(baseline_output, profiles, state_file),
+            required_inputs=(baseline_output, retrieval_profiles, state_file),
             declared_outputs=(matches_output,),
-            execute_fn=lambda _payload: _match_assets(baseline_output, profiles, state_file),
+            execute_fn=lambda _payload: _match_assets(baseline_output, retrieval_profiles, state_file),
         )
     )
     return registry
+
+
+def _build_material_evidence(
+    baseline_path: Path,
+    profiles_path: Path,
+    annotations_path: Path,
+    requirements_path: Path,
+    evidence_profiles_path: Path,
+) -> Mapping[str, object]:
+    baseline = read_json_object(baseline_path)
+    profiles_artifact = read_json_object(profiles_path)
+    profiles = _required_list(profiles_artifact, "asset_profiles")
+    annotations = read_json_object(annotations_path) if annotations_path.is_file() else None
+    if annotations is not None:
+        hashes = annotations.get("input_hashes")
+        if not isinstance(hashes, Mapping) or hashes.get("asset_profiles.json") != _file_hash(profiles_path):
+            raise ValueError("material evidence annotation profile hash is stale")
+        if not requirements_path.is_file() or hashes.get("material_evidence_requirements.json") != _file_hash(requirements_path):
+            raise ValueError("material evidence requirements hash is stale")
+    requirements = build_material_evidence_requirements(baseline, profiles, annotations)
+    merged = merge_material_evidence(profiles, annotations)
+    requirements_path.parent.mkdir(parents=True, exist_ok=True)
+    evidence_profiles_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(requirements_path, requirements)
+    atomic_write_json(evidence_profiles_path, {
+        "artifact_type": "material_evidence_profiles", "profiles": merged["profiles"],
+        "input_hashes": requirements["input_hashes"],
+    })
+    if requirements["status"] != "ready":
+        return {
+            "status": "recoverable_pause", "active_stage": "collect-material-evidence",
+            "blocker": {
+                "category": "manual_classification_required", "requires_user": True,
+                "detail": "需要补充素材的产品、语义、动作、叠字和证据窗",
+                "requirements_sha256": _file_hash(requirements_path),
+                "asset_profiles_sha256": _file_hash(profiles_path),
+            },
+            "next_actions": ["submit_material_evidence"],
+        }
+    return {"status": "succeeded"}
 
 
 def _compile_blueprint(
@@ -156,7 +217,7 @@ def _build_coverage(
     return RetrievalAdapter().build_coverage(
         scope="authoritative",
         content_baseline=read_json_object(baseline_path),
-        asset_profiles=_required_list(read_json_object(profiles_path), "asset_profiles"),
+        asset_profiles=_profiles_for_retrieval(profiles_path),
         gate2_approved=_gate_approved(state_path, "gate2"),
     )
 
@@ -166,7 +227,7 @@ def _match_assets(
 ) -> Mapping[str, object]:
     return RetrievalAdapter().match_assets(
         content_baseline=read_json_object(baseline_path),
-        asset_profiles=_required_list(read_json_object(profiles_path), "asset_profiles"),
+        asset_profiles=_profiles_for_retrieval(profiles_path),
         gate2_approved=_gate_approved(state_path, "gate2"),
     )
 
@@ -189,6 +250,12 @@ def _required_list(value: object, field: str) -> list[Mapping[str, object]]:
     if isinstance(value, Mapping) and isinstance(value.get(field), list):
         return [row for row in value[field] if isinstance(row, Mapping)]
     raise ValueError(f"{field} must be an array of objects")
+
+
+def _profiles_for_retrieval(path: Path) -> list[Mapping[str, object]]:
+    value = read_json_object(path)
+    field = "profiles" if value.get("artifact_type") == "material_evidence_profiles" else "asset_profiles"
+    return _required_list(value, field)
 
 
 __all__ = ["register_planning_adapters"]

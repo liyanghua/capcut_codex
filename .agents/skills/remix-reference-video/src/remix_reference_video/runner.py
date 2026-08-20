@@ -1309,6 +1309,53 @@ class ProductionRunner:
                             "invalid stage input: " + "; ".join(validation.errors)
                         )
                 execution = adapter.execute(attempt_id=attempt.attempt_id)
+                if execution.get("status") == "recoverable_pause":
+                    artifacts = self._artifact_records(adapter)
+                    blocker = execution.get("blocker")
+                    if not isinstance(blocker, Mapping) or not isinstance(blocker.get("category"), str):
+                        raise StorageError("recoverable pause requires a structured blocker")
+                    active_stage = execution.get("active_stage")
+                    if not isinstance(active_stage, str) or not active_stage:
+                        raise StorageError("recoverable pause requires active_stage")
+                    next_actions_raw = execution.get("next_actions", [])
+                    if not isinstance(next_actions_raw, list) or any(not isinstance(item, str) or not item for item in next_actions_raw):
+                        raise StorageError("recoverable pause next_actions are invalid")
+                    paused = store.update_state(
+                        lambda current: current
+                        | {
+                            "active_stage": active_stage,
+                            "active_command": None,
+                            "stage_status": {**current["stage_status"], node.node_id: "not_started"},
+                            "blockers": [
+                                *[
+                                    row for row in current.get("blockers", [])
+                                    if not (isinstance(row, Mapping) and row.get("category") == blocker["category"])
+                                ],
+                                {**dict(blocker), "stage_id": node.node_id},
+                            ],
+                            "artifacts": {**current["artifacts"], **artifacts},
+                            "cache_summary": {
+                                **current["cache_summary"],
+                                node.node_id: {"status": "recoverable_pause", "fingerprint": adapter.cache_fingerprint()},
+                            },
+                        }
+                    )
+                    elapsed = time.perf_counter() - started_at
+                    store.append_event(
+                        {"event_type": "command.blocked", "execution_stage_id": node.node_id, "blocker_category": blocker["category"]},
+                        state_revision=self._revision(paused),
+                    )
+                    store.append_metric({
+                        "execution_stage_id": node.node_id, "attempt_id": attempt.attempt_id,
+                        "status": "recoverable_pause", "wall_seconds": elapsed,
+                        **_metric_cache_facts(execution, cache_status="miss"),
+                    })
+                    return self._result(
+                        store, status="blocked", exit_code=4, request_id=request_id,
+                        invocation_id=invocation_id, idempotency_key=idempotency_key,
+                        before=before, next_actions=tuple(next_actions_raw),
+                        error_code="RECOVERABLE_STAGE_PAUSE",
+                    )
                 review_artifacts = self._seal_gate_review_package(store, node, adapter)
                 artifacts = {**self._artifact_records(adapter), **review_artifacts}
             except BaseException as error:
@@ -1490,6 +1537,7 @@ class ProductionRunner:
         idempotency_key: str,
         before: int,
         next_actions: tuple[str, ...] = (),
+        error_code: str | None = None,
     ) -> CommandResult:
         state = store.read_state()
         events = store.read_events()
@@ -1503,5 +1551,5 @@ class ProductionRunner:
             state_revision_after=ProductionRunner._revision(state),
             event_sequence=0 if not events else int(events[-1]["sequence"]),
             next_actions=next_actions,
-            error_code=None,
+            error_code=error_code,
         )

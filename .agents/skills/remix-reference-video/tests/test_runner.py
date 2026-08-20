@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from remix_reference_video import ExecutionPlan
 from remix_reference_video.approvals import ApprovalService
+from remix_reference_video.orchestrator import DAGNode
 from remix_reference_video.runner import FastPathRunner, ProductionRunner
 from remix_reference_video.storage import TaskStorage
 
@@ -728,6 +729,47 @@ class ProductionRunnerTests(unittest.TestCase):
         }
 
         self.assertIsNone(runner._pending_gate(state))
+
+    def test_recoverable_material_evidence_pause_remains_resumable(self) -> None:
+        task = self.task
+
+        class EvidenceAdapter:
+            execution_stage_id = "build-material-evidence-requirements"
+            implementation_version = "evidence-v1"
+            stop_gate = None
+
+            def required_inputs(self) -> tuple[Path, ...]:
+                return ()
+
+            def required_gates(self) -> tuple[str, ...]:
+                return ()
+
+            def declared_outputs(self) -> tuple[Path, ...]:
+                return (task / "material_evidence_requirements.json",)
+
+            def cache_fingerprint(self) -> str:
+                return "evidence-fingerprint"
+
+            def execute(self, *, attempt_id: str) -> dict[str, object]:
+                (task / "material_evidence_requirements.json").write_text('{"status":"manual_classification_required"}\n', encoding="utf-8")
+                return {
+                    "status": "recoverable_pause", "active_stage": "collect-material-evidence",
+                    "blocker": {"category": "manual_classification_required", "requires_user": True},
+                    "next_actions": ["submit_material_evidence"],
+                }
+
+        runner = ProductionRunner(
+            self.task, (EvidenceAdapter(),),
+            dag=(DAGNode("init"), DAGNode("build-material-evidence-requirements", ("init",))),
+        )
+        runner.initialize(run_id="fixture-run")
+        result = runner.run()
+        state = TaskStorage(self.task).read_state()
+        self.assertEqual(result.status, "blocked")
+        self.assertEqual(result.next_actions, ("submit_material_evidence",))
+        self.assertEqual(state["active_stage"], "collect-material-evidence")
+        self.assertEqual(state["stage_status"]["build-material-evidence-requirements"], "not_started")
+        self.assertEqual(state["blockers"][0]["category"], "manual_classification_required")
 
     def test_reference_split_stops_at_gate1_and_resume_is_write_free(self) -> None:
         calls: list[str] = []

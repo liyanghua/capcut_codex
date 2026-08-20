@@ -111,6 +111,14 @@ def materialize_approved_decomposition(task_root: Path) -> dict[str, object]:
             "decomposition_segment_id": segment.get("segment_id"),
             "strategy_id": selected.get("strategy_id"),
             "strategy_version": "decomposition_handoff_v1",
+            "requirements": {
+                "product_type": str(brief.get("product", {}).get("name", "")) if isinstance(brief.get("product"), Mapping) else "",
+                "required_semantics": [claim["claim_id"]] if isinstance(claim, Mapping) else [],
+                "required_actions": [action],
+                "allowed_media_types": ["image", "video"],
+                "forbidden_semantics": [],
+                "expected_visual_seconds": 1.0,
+            },
         }
         for name in ("reference_shot_id", "start_seconds", "end_seconds"):
             if name in segment:

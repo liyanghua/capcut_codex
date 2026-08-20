@@ -11,6 +11,7 @@
       "semantic_tags": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "action_tags": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
       "overlay_decision": {"enum": ["none", "retain_source_text", "avoid_source_text"]},
       "evidence_window": {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["frame", "time_range"]}, "frame_path": {"type": "string"}, "start_seconds": {"type": "number", "minimum": 0}, "end_seconds": {"type": "number", "exclusiveMinimum": 0}}, "additionalProperties": false},
+      "scores": {"type": "object", "required": ["semantic", "action", "composition", "color", "lighting", "technical"], "properties": {"semantic": {"type": "number", "minimum": 0, "maximum": 1}, "action": {"type": "number", "minimum": 0, "maximum": 1}, "composition": {"type": "number", "minimum": 0, "maximum": 1}, "color": {"type": "number", "minimum": 0, "maximum": 1}, "lighting": {"type": "number", "minimum": 0, "maximum": 1}, "technical": {"type": "number", "minimum": 0, "maximum": 1}}, "additionalProperties": false},
       "score_basis": {"type": "string"}
     }, "additionalProperties": false}}
   }, "additionalProperties": false
