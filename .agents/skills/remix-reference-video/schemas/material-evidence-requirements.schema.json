@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:capcut:remix-reference-video:artifact:material-evidence-requirements", "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "lifecycle_status", "input_hashes", "status", "requirements"],
+  "properties": {
+    "artifact_type": {"const": "material_evidence_requirements"}, "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:material-evidence-requirements"},
+    "schema_version": {"const": "1.0.0"}, "contract_version": {"const": "2.0.0-alpha.1"}, "skill_version": {"const": "2.0.0-alpha.1"},
+    "lifecycle_status": {"enum": ["ready", "stale"]}, "input_hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["ready", "manual_classification_required"]}, "requirements": {"type": "array", "items": {"type": "object"}}
+  }, "additionalProperties": false
+}

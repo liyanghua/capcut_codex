@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="local-session-nonce" content="__LOCAL_NONCE__">
+  <meta name="project-id" content="__PROJECT_ID__">
+  <title>新建视频项目</title>
+  <link rel="stylesheet" href="/static/project_initialization.css">
+</head>
+<body data-page="project-initialization">
+  <header class="topbar">
+    <div><strong>新建视频项目</strong><span>Stage 0 输入与冻结</span></div>
+    <a class="text-link" href="/workbench">返回项目</a>
+  </header>
+  <main class="form-shell">
+    <section class="page-heading">
+      <div><p class="eyebrow">参考视频复刻</p><h1>准备项目输入</h1></div>
+      <div id="project-status" class="status-pill">草稿</div>
+    </section>
+    <div id="form-message" class="message" hidden></div>
+    <form id="project-form" novalidate>
+      <section class="form-section">
+        <div class="section-title"><span>01</span><div><h2>参考片与自有素材</h2><p>选择本机文件，路径只保存在本地。</p></div></div>
+        <div class="field-grid">
+          <label class="field field-wide"><span>参考视频</span><div class="path-control"><input id="reference-path" name="reference_path" type="text" placeholder="输入绝对路径"><button type="button" class="secondary" data-picker="reference_video">选择文件</button></div><small id="reference-path-status">尚未校验</small></label>
+          <label class="field field-wide"><span>自有素材目录</span><div class="path-control"><input id="asset-root" name="asset_root" type="text" placeholder="输入绝对路径"><button type="button" class="secondary" data-picker="asset_directory">选择目录</button></div><small id="asset-root-status">尚未校验</small></label>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="section-title"><span>02</span><div><h2>项目目标</h2><p>这些信息将进入冻结 Brief。</p></div></div>
+        <div class="field-grid">
+          <label class="field"><span>产品名称</span><input name="product_name" required></label>
+          <label class="field"><span>任务名称</span><input name="task_name" pattern="[a-z0-9][a-z0-9-]{0,63}" placeholder="tablemat-summer-01" required><small>使用小写英文、数字和连字符</small></label>
+          <label class="field"><span>目标平台</span><select name="platform"><option>抖音</option><option>小红书</option><option>视频号</option></select></label>
+          <label class="field"><span>受众</span><input name="audience" required></label>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="section-title"><span>03</span><div><h2>允许与限制</h2><p>每行一条，只使用你确认的产品事实。</p></div></div>
+        <div class="field-grid">
+          <label class="field"><span>允许使用的卖点</span><textarea name="approved_claims" rows="5" placeholder="极简透明&#10;防水防油"></textarea></label>
+          <label class="field"><span>禁止或未经批准的声明</span><textarea name="forbidden_claims" rows="5" placeholder="没有则留空"></textarea></label>
+          <label class="field"><span>音色</span><input name="speaker" value="zh_female_gaolengyujie_uranus_bigtts"></label>
+          <label class="field"><span>语速</span><input name="speed" value="1.0" readonly></label>
+        </div>
+        <div class="spec-row"><span>9:16 竖屏</span><span>1080 × 1920</span><span>60 fps</span><span>不自动变速</span><span>不冻结尾帧</span></div>
+      </section>
+      <footer class="action-bar">
+        <button id="save-draft" type="button" class="secondary">保存草稿</button>
+        <button id="run-stage0" type="button" class="primary">开始 Stage 0 预检</button>
+      </footer>
+    </form>
+    <section id="stage0-result" class="form-section stage0-result" hidden>
+      <div class="section-title"><span>✓</span><div><h2>Stage 0 结果</h2><p id="stage0-summary"></p></div></div>
+      <div id="stage0-facts" class="fact-grid"></div>
+      <div class="action-bar inline-actions">
+        <button id="freeze-project" type="button" class="primary">确认 Brief 并冻结</button>
+        <button id="start-cold" type="button" class="primary" hidden>启动 Gate 1</button>
+      </div>
+    </section>
+  </main>
+  <script src="/static/project_initialization.js" defer></script>
+</body>
+</html>

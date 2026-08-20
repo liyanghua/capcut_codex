@@ -138,6 +138,20 @@ class ArtifactValidator:
                 errors.append(f"quality report must not carry approval field: {key_path}")
         return ValidationResult(tuple(errors))
 
+    def validate_non_authoritative(self, path: Path) -> ValidationResult:
+        """Validate a non-authoritative artifact envelope and reject approval-shaped data."""
+        requested = Path(path)
+        if not requested.is_absolute():
+            requested = self.root / requested
+        errors = list(self.validate_artifact(requested).errors)
+        try:
+            value = read_json_object(self._path(requested, must_exist=True))
+        except StorageError as error:
+            return ValidationResult((str(error),))
+        for key_path in _find_reserved_approval_keys(value):
+            errors.append(f"non-authoritative artifact must not carry approval field: {key_path}")
+        return ValidationResult(tuple(errors))
+
     def validate_hash(self, relative_path: str, expected_hash: str) -> ValidationResult:
         try:
             if not isinstance(relative_path, str) or Path(relative_path).is_absolute():

@@ -83,6 +83,7 @@ _STAGE_BUSINESS = {
     "compile-blueprint": "复刻方案",
     "compile-mutation-plan": "复刻方案",
     "lint-gate2-package": "复刻方案",
+    "build-material-evidence-requirements": "素材证据补充",
     "build-coverage-authoritative": "复刻方案",
     "match-assets": "素材与证据",
     "build-material-selection-package": "素材与证据",
@@ -140,6 +141,7 @@ class WorkbenchWorkspaceBuilder:
         script_candidates = self._optional_json("script_candidates.json")
         script_candidate_validation = self._optional_json("script_candidate_validation_report.json")
         decomposition = self._optional_json("decomposition_bundle.json")
+        material_evidence = self._optional_json("material_evidence_requirements.json")
         preflight = self._optional_json("voice_preflight.json")
         reconstruction = self._optional_json("reconstruction_timeline.json")
         final_validation = self._optional_json("final_validation_report.json")
@@ -185,6 +187,8 @@ class WorkbenchWorkspaceBuilder:
             recommendation = "建议通过当前已具备的审核内容。"
         else:
             recommendation = "当前 Gate 不在待审核状态。"
+        collecting_material_evidence = state.get("active_stage") == "collect-material-evidence"
+        process_stage = "素材证据补充" if collecting_material_evidence else label
         view: dict[str, Any] = {
             "artifact_type": "workbench_workspace_view",
             "schema_id": "urn:capcut:remix-reference-video:artifact:workbench-workspace-view",
@@ -203,11 +207,11 @@ class WorkbenchWorkspaceBuilder:
             "timeline": timeline,
             "artifacts": self._artifacts(state),
             "quality_checks": self._quality_checks(final_validation, render_report),
-            "process": {"current_stage": label, "current_gate": gate_id, "stages": stages, "execution": self._execution()},
+            "process": {"current_stage": process_stage, "current_gate": gate_id, "stages": stages, "execution": self._execution()},
             "decision_context": {
                 "question": _GATE_QUESTIONS[gate_id], "recommendation": recommendation,
                 "evidence": evidence, "risks": [str(item.get("detail") or item.get("category") or "待确认阻塞") for item in blockers],
-                "next_action": "按驳回原因重新生成审核包" if gate_status == "rejected" else ("处理阻塞并重新审核" if gate_status == "blocked" else ("刷新审核包后重新确认" if gate_status == "stale" else ("补齐缺失事实并重新审核" if missing or blockers else "选择通过、要求修改或驳回"))),
+                "next_action": "补充素材业务证据后继续匹配" if collecting_material_evidence else ("按驳回原因重新生成审核包" if gate_status == "rejected" else ("处理阻塞并重新审核" if gate_status == "blocked" else ("刷新审核包后重新确认" if gate_status == "stale" else ("补齐缺失事实并重新审核" if missing or blockers else "选择通过、要求修改或驳回")))),
                 "approval_eligibility": gate_status == "awaiting_user" and not missing and not blockers and lifecycle == "ready",
                 "gate_status": gate_status,
                 "missing_artifacts": missing,
@@ -224,6 +228,15 @@ class WorkbenchWorkspaceBuilder:
                 "script_candidates": script_candidates.get("candidates", []) if isinstance(script_candidates, Mapping) else [],
                 "script_candidate_validation": script_candidate_validation.get("candidates", []) if isinstance(script_candidate_validation, Mapping) else [],
                 "decomposition_candidates": decomposition.get("candidates", []) if isinstance(decomposition, Mapping) else [],
+                "material_evidence": {
+                    "status": material_evidence.get("status"),
+                    "requirements": material_evidence.get("requirements", []),
+                    "input_hashes": material_evidence.get("input_hashes", {}),
+                    "submission_hashes": {
+                        "material_evidence_requirements.json": self._file_sha256("material_evidence_requirements.json"),
+                        "asset_profiles.json": self._file_sha256("asset_profiles.json") if self._exists("asset_profiles.json") else None,
+                    },
+                } if collecting_material_evidence and isinstance(material_evidence, Mapping) else None,
                 "voice_preflight": self._artifact_summary(gate_id, preflight, "voice_preflight"),
                 "voice_preflight_details": self._voice_preflight_details(gate_id, preflight),
                 "generated_voice": self._artifact_summary(gate_id, voice_manifest, "voice"),

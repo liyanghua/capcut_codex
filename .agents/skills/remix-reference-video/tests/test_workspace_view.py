@@ -70,6 +70,53 @@ class WorkspaceViewTests(unittest.TestCase):
         self.assertEqual(view["storyboard"]["elements"], [])
         self.assertIn("待确认", view["decision_context"]["recommendation"])
 
+    def test_material_evidence_pause_projects_requirements_without_gate_controls(self) -> None:
+        self.store.update_state(
+            lambda state: state
+            | {
+                "active_stage": "collect-material-evidence",
+                "gate_status": {**state["gate_status"], "gate3_material_selection": "not_ready"},
+                "blockers": [
+                    {
+                        "category": "manual_classification_required",
+                        "requires_user": True,
+                        "detail": "需要补充素材业务证据",
+                    }
+                ],
+            }
+        )
+        self.write(
+            "material_evidence_requirements.json",
+            {
+                "status": "manual_classification_required",
+                "input_hashes": {"asset_profiles.json": "a" * 64},
+                "requirements": [
+                    {
+                        "fragment_id": "fragment01",
+                        "missing_fields": ["product_type", "semantic_tags", "action_tags"],
+                        "eligible_asset_ids": [],
+                        "candidate_assets": [
+                            {
+                                "asset_id": "asset-1",
+                                "source_path": "assets/table.jpg",
+                                "sha256": "b" * 64,
+                                "media_type": "image",
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+        view = self.builder.build("gate3_material_selection")
+
+        evidence = view["decision_context"]["material_evidence"]
+        self.assertEqual(view["process"]["current_stage"], "素材证据补充")
+        self.assertEqual(evidence["status"], "manual_classification_required")
+        self.assertEqual(evidence["requirements"][0]["missing_fields"], ["product_type", "semantic_tags", "action_tags"])
+        self.assertFalse(view["decision_context"]["approval_eligibility"])
+        self.assertEqual(view["decision_context"]["next_action"], "补充素材业务证据后继续匹配")
+
     def test_projects_real_artifacts_and_uses_gate_timeline_fallbacks(self) -> None:
         self.write("project_brief.json", {"task_name": "桌垫演示", "product_name": "云朵桌垫", "platform": "抖音"})
         self.write(

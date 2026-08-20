@@ -45,5 +45,26 @@ class RunRegistryTests(unittest.TestCase):
         self.assertEqual(repaired["task_dir"], str(moved))
         self.assertEqual(repaired["audit_history"][-1]["action"], "repair")
 
+    def test_registry_accepts_versioned_nested_asset_snapshot(self) -> None:
+        assets = self.task / "fixture-assets"
+        original = assets / "asset.mp4"
+        nested = assets / "products" / "asset.mp4"
+        nested.parent.mkdir()
+        original.rename(nested)
+        marker = self.task / "g_b_frozen_input_snapshot.json"
+        value = json.loads(marker.read_text(encoding="utf-8"))
+        value["asset_snapshot_contract_version"] = "relative_path_v1"
+        value["asset_snapshot"] = {"products/asset.mp4": value["asset_snapshot"]["asset.mp4"]}
+        atomic_write_json(marker, value)
+        self.assertEqual(self.registry.register(self.task)["run_id"], "run-1")
+
+    def test_registry_rejects_nested_asset_without_contract_marker(self) -> None:
+        marker = self.task / "g_b_frozen_input_snapshot.json"
+        value = json.loads(marker.read_text(encoding="utf-8"))
+        value["asset_snapshot"] = {"products/asset.mp4": next(iter(value["asset_snapshot"].values()))}
+        atomic_write_json(marker, value)
+        with self.assertRaisesRegex(RunRegistryError, "invalid|direct child"):
+            self.registry.register(self.task)
+
 
 if __name__ == "__main__": unittest.main()

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="local-session-nonce" content="__LOCAL_NONCE__">
   <title>视频审核工作区</title>
   <link rel="stylesheet" href="/static/review_workbench.css">
   <style>
@@ -65,6 +66,7 @@
       <div class="assistant-header"><span class="eyebrow">流程决策助手</span><strong id="assistant-stage">加载中</strong></div>
       <ol id="stage-stepper" class="stage-stepper"></ol>
       <div id="stage-cards">
+        <section class="decision-card evidence-editor" id="material-evidence-card" hidden><h3>补充素材业务证据</h3><p class="muted">勾选准备使用的素材，并按实际画面填写。未勾选素材不会进入本次提交。</p><div id="material-evidence-editor"></div><button id="submit-material-evidence" type="button" class="primary">提交证据并继续匹配</button></section>
         <section class="decision-card"><span class="eyebrow">现在要判断</span><h2 id="decision-question">正在读取</h2><p id="recommendation" class="recommendation"></p></section>
         <section class="decision-card"><h3>依据</h3><div id="evidence-list" class="evidence-list"></div></section>
         <section class="decision-card" id="stage-content-card" hidden><h3>阶段内容</h3><div id="stage-content"></div></section>
@@ -72,8 +74,8 @@
         <section class="decision-card risks-card"><h3>风险与缺口</h3><div id="risks"></div></section>
         <section class="decision-card"><h3>下一步</h3><p id="next-action" class="next-action"></p></section>
       </div>
-      <div class="decision-actions"><button type="button" class="primary" data-action="approve">通过</button><button type="button" data-action="request_changes">要求修改</button><button type="button" class="danger" data-action="reject">驳回</button></div>
-      <label class="note-label" for="decision-note">审核意见</label><textarea id="decision-note" rows="3" placeholder="驳回或要求修改时填写原因"></textarea>
+      <div id="decision-actions" class="decision-actions"><button type="button" class="primary" data-action="approve">通过</button><button type="button" data-action="request_changes">要求修改</button><button type="button" class="danger" data-action="reject">驳回</button></div>
+      <div id="decision-note-wrap"><label class="note-label" for="decision-note">审核意见</label><textarea id="decision-note" rows="3" placeholder="驳回或要求修改时填写原因"></textarea></div>
     </aside>
   </main>
   <dialog id="change-dialog"><form id="change-form" method="dialog"><header><div><span class="eyebrow">结构化修改</span><h2>告诉系统怎么改</h2></div><button type="button" class="icon-button" data-close aria-label="关闭">关闭</button></header><label for="change-type">修改对象</label><select id="change-type"></select><label for="change-target">具体内容</label><select id="change-target"></select><label for="change-reason">业务原因</label><textarea id="change-reason" rows="3" required placeholder="例如：第 2 段素材未展示防水效果"></textarea><div id="impact-preview" class="impact-preview" hidden></div><footer><button type="button" data-preview>预览影响</button><button type="button" class="primary" data-confirm disabled>确认修改</button></footer></form></dialog>

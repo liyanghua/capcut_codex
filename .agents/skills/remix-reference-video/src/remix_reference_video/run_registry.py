@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .production_runtime import ProductionRuntimeConfig
+from .path_contracts import PathContractError, resolve_asset_snapshot_path
 from .storage import StorageError, atomic_write_json, read_json_object
 
 
@@ -123,8 +124,11 @@ class RunRegistry:
         asset_snapshot = frozen.get("asset_snapshot")
         if not isinstance(asset_snapshot, dict) or not asset_snapshot:
             raise RunRegistryError("frozen input snapshot asset source contract is required")
+        contract_version = frozen.get("asset_snapshot_contract_version")
+        if contract_version is not None and not isinstance(contract_version, str):
+            raise RunRegistryError("frozen input snapshot asset source contract is invalid")
         for name, digest in asset_snapshot.items():
-            if not isinstance(name, str) or Path(name).name != name or not self._is_sha256(digest):
+            if not isinstance(name, str) or not self._is_sha256(digest):
                 raise RunRegistryError("frozen input snapshot asset source contract is invalid")
 
         references = sorted(task.glob("reference-*.mp4"))
@@ -152,8 +156,11 @@ class RunRegistry:
         if runtime.reference_path != references[0] or runtime.brief_path != brief or runtime.asset_profiles_path != profiles:
             raise RunRegistryError("production runtime config does not bind the frozen inputs")
         for name, expected in asset_snapshot.items():
-            source = runtime.asset_root / str(name)
-            if source.is_symlink() or not source.is_file() or self._sha256(source) != expected:
+            try:
+                source = resolve_asset_snapshot_path(runtime.asset_root, str(name), contract_version)
+            except PathContractError as error:
+                raise RunRegistryError(str(error)) from error
+            if self._sha256(source) != expected:
                 raise RunRegistryError(f"frozen asset source hash mismatch: {name}")
 
         frozen_hash = self._sha256(frozen_path)

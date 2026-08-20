@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="local-session-nonce" content="__LOCAL_NONCE__">
+  <title>视频项目</title>
+  <link rel="stylesheet" href="/static/project_initialization.css">
+</head>
+<body data-page="project-list">
+  <header class="topbar">
+    <div><strong>视频项目</strong><span>参考视频复刻工作台</span></div>
+    <a class="primary-link" href="/workbench/projects/new">新建项目</a>
+  </header>
+  <main class="page-shell">
+    <section class="page-heading">
+      <div><p class="eyebrow">项目工作区</p><h1>最近项目</h1></div>
+      <p class="muted">草稿、Stage 0 与审核任务集中在这里。</p>
+    </section>
+    <div id="project-list" class="project-list" aria-live="polite"><p class="empty-state">正在读取项目...</p></div>
+  </main>
+  <script src="/static/project_initialization.js" defer></script>
+</body>
+</html>

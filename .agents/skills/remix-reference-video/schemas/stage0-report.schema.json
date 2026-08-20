@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:capcut:remix-reference-video:artifact:stage0-report", "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "project_id", "draft_revision", "status", "input_hashes", "checks", "asset_summary", "risks", "missing_fields", "suggested_actions"],
+  "properties": {
+    "artifact_type": {"const": "stage0_report"}, "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:stage0-report"},
+    "schema_version": {"const": "1.0.0"}, "contract_version": {"const": "2.0.0-alpha.1"}, "skill_version": {"const": "2.0.0-alpha.1"},
+    "project_id": {"type": "string"}, "draft_revision": {"type": "integer", "minimum": 1}, "status": {"enum": ["running", "ready", "blocked", "cancelled", "scan_error", "stale"]},
+    "input_hashes": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "checks": {"type": "array", "items": {"type": "object"}}, "asset_summary": {"type": "object"}, "risks": {"type": "array", "items": {"type": "object"}},
+    "missing_fields": {"type": "array", "items": {"type": "string"}}, "suggested_actions": {"type": "array", "items": {"type": "string"}}
+  }, "additionalProperties": false
+}
