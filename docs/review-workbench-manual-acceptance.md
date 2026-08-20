@@ -29,6 +29,7 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-regis
 以固定本机身份启动，只允许 loopback host：
 
 ```bash
+WORKBENCH_UI_MODE=workspace \
 python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-serve \
   --workspace-root . \
   --actor <operator-id> \
@@ -37,7 +38,21 @@ python3 .agents/skills/remix-reference-video/scripts/remixctl.py workbench-serve
   --port 8765
 ```
 
-打开 `http://127.0.0.1:8765/workbench/runs/<run-id>`。不要用历史任务、另一侧 cold/hot 或其他 actor 的 session 做决定。
+打开 `http://127.0.0.1:8765/workbench`。新任务从“新建项目”进入；已有 run 可直接打开 `http://127.0.0.1:8765/workbench/runs/<run-id>`。不要用历史任务、另一侧 cold/hot 或其他 actor 的 session 做决定。
+
+## 新项目初始化检查
+
+在 1440px 与 390px 分别人工检查：
+
+- “选择文件”和“选择目录”能调用 macOS 原生选择器；取消后保留当前输入，选择器不可用时可继续手动输入绝对路径。
+- 手动路径失焦后显示 `valid|missing|not_readable|unsupported|symlink|scan_error` 对应业务提示；相对路径和 symlink 不得通过。
+- 保存草稿后进入稳定项目 URL；刷新仍保留 Brief，旧 revision 提交返回冲突且不覆盖新内容。
+- Stage 0 展示参考片、素材数量、媒体类型与风险；此时不存在 `pipeline_state.json`、Gate 包、TTS、代理、字幕或成片。
+- “确认 Brief 并冻结”只创建 `frozen-input/`；输入在预检后变化时必须拒绝冻结。
+- runtime 缺失时“启动 Gate 1”返回可恢复提示且不创建 cold/hot；runtime 可用时只跳转服务端返回的 cold `run_id`。
+- Gate 2 后缺素材业务证据时，工作台显示候选素材、缺失字段和证据窗表单，隐藏通过/驳回；补齐后自动恢复并在真正 Gate 3 包生成后才显示审核按钮。
+
+自动化已覆盖 localhost/Origin/nonce、picker 固定模式、路径验证、草稿并发、Stage 0/freeze 边界、素材证据提交与恢复、DOM 按钮执行。人工检查未完成前，不把初始化页或 `workspace` 模式声明为一线默认入口。
 
 ## 六类状态检查
 
