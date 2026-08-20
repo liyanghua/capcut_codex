@@ -10,6 +10,7 @@ from .adapters.blueprint import BlueprintAdapter
 from .adapters.decomposition import DecompositionAdapter
 from .adapters.mutation import ControlledMutationAdapter
 from .adapters.retrieval import RetrievalAdapter
+from .decomposition_handoff import build_gate1_package, materialize_approved_decomposition
 from .native_registry import NativeAdapterRegistry, NativeStageAdapter
 from .storage import read_json_object
 
@@ -56,7 +57,20 @@ def register_planning_adapters(
         implementation_version="gate1-creative-package-v1",
         required_inputs=(recipe, decomposition_output, state_file),
         declared_outputs=(gate1_package,),
-        execute_fn=lambda: _gate1_package(root, recipe, decomposition_output, state_file),
+        execute_fn=lambda: build_gate1_package(root),
+    ))
+    registry.register(NativeStageAdapter(
+        root,
+        execution_stage_id="materialize-approved-decomposition",
+        implementation_version="decomposition-handoff-v1",
+        required_inputs=(brief, decomposition_output, gate1_package, state_file),
+        declared_outputs=(
+            root / "derived" / "gate1_decomposition_selection.json",
+            root / "stage_inputs" / "compile-blueprint.json",
+            root / "stage_inputs" / "compile-mutation-plan.json",
+        ),
+        execute_fn=lambda: materialize_approved_decomposition(root),
+        domain_managed_outputs=True,
     ))
 
     blueprint_output = root / "shot_blueprint.json"
@@ -155,23 +169,6 @@ def _match_assets(
         asset_profiles=_required_list(read_json_object(profiles_path), "asset_profiles"),
         gate2_approved=_gate_approved(state_path, "gate2"),
     )
-
-
-def _gate1_package(root: Path, recipe: Path, decomposition: Path, state_path: Path) -> Mapping[str, object]:
-    state = read_json_object(state_path)
-    bundle = read_json_object(decomposition)
-    candidates = bundle.get("candidates")
-    if not isinstance(candidates, list) or not candidates:
-        raise ValueError("decomposition candidates are required")
-    return {
-        "artifact_type": "gate_review_package",
-        "schema_id": "urn:capcut:remix-reference-video:artifact:gate-review-package",
-        "schema_version": "1.0.0", "contract_version": "2.0.0-alpha.1", "skill_version": "2.0.0-alpha.1",
-        "gate_id": "gate1", "run_id": state["run_id"], "state_revision": state["state_revision"],
-        "created_at": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-        "input_hashes": {"recipe.json": _file_hash(recipe), "decomposition_bundle.json": _file_hash(decomposition)},
-        "creative_bindings": {"selected_decomposition_id": candidates[0]["decomposition_id"], "decomposition_bundle.json_sha256": _file_hash(decomposition)},
-    }
 
 
 def _file_hash(path: Path) -> str:
