@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:capcut:remix-reference-video:artifact:project-initialization-draft",
+  "type": "object",
+  "required": ["artifact_type", "schema_id", "schema_version", "contract_version", "skill_version", "project_id", "reference_path", "asset_root", "product_name", "task_name", "platform", "audience", "approved_claims", "forbidden_claims", "output", "voice", "created_by", "created_at", "updated_at", "draft_revision", "lifecycle_status"],
+  "properties": {
+    "artifact_type": {"const": "project_initialization_draft"},
+    "schema_id": {"const": "urn:capcut:remix-reference-video:artifact:project-initialization-draft"},
+    "schema_version": {"const": "1.0.0"}, "contract_version": {"const": "2.0.0-alpha.1"}, "skill_version": {"const": "2.0.0-alpha.1"},
+    "project_id": {"type": "string", "format": "uuid"},
+    "reference_path": {"type": "string", "pattern": "^/"}, "asset_root": {"type": "string", "pattern": "^/"},
+    "product_name": {"type": "string", "minLength": 1}, "task_name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"},
+    "platform": {"type": "string", "minLength": 1}, "audience": {"type": "string", "minLength": 1},
+    "approved_claims": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "forbidden_claims": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "output": {"type": "object", "required": ["aspect_ratio", "width", "height", "fps"], "properties": {"aspect_ratio": {"const": "9:16"}, "width": {"const": 1080}, "height": {"const": 1920}, "fps": {"const": 60}}, "additionalProperties": false},
+    "voice": {"type": "object", "required": ["provider", "speaker", "speed"], "properties": {"provider": {"type": "string", "minLength": 1}, "speaker": {"type": "string", "minLength": 1}, "speed": {"const": 1.0}}, "additionalProperties": false},
+    "created_by": {"type": "string", "minLength": 1}, "created_at": {"type": "string", "minLength": 1}, "updated_at": {"type": "string", "minLength": 1},
+    "draft_revision": {"type": "integer", "minimum": 1}, "lifecycle_status": {"enum": ["draft", "stage0_running", "stage0_awaiting_confirmation", "frozen_waiting_gate1", "cold_running_or_awaiting_review", "hot_running_or_awaiting_review", "completed", "blocked", "stale"]}
+  },
+  "additionalProperties": false
+}

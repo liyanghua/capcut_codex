@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .measurement import MeasurementError
 from .media_runtime import FFprobeDuration
+from .path_contracts import PathContractError, resolve_asset_snapshot_path
 from .storage import StorageError, atomic_write_json, read_json_object
 
 
@@ -202,12 +203,14 @@ def validate_frozen_input(
     assets = requested_assets.resolve(strict=True)
     if not assets.is_dir():
         raise MeasurementError("asset root must be a regular directory")
+    contract_version = marker.get("asset_snapshot_contract_version")
+    if contract_version is not None and not isinstance(contract_version, str):
+        raise MeasurementError("frozen asset snapshot contract version is invalid")
     for name, expected in sources.items():
-        if not isinstance(name, str) or Path(name).name != name:
-            raise MeasurementError("frozen asset names must be direct children")
-        source = assets / name
-        if source.is_symlink() or not source.is_file():
-            raise MeasurementError(f"frozen asset is missing: {name}")
+        try:
+            source = resolve_asset_snapshot_path(assets, name, contract_version)
+        except PathContractError as error:
+            raise MeasurementError(str(error)) from error
         if expected != _sha256(source):
             raise MeasurementError(f"frozen asset hash does not match: {name}")
     return {

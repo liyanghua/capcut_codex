@@ -12,10 +12,40 @@ from remix_reference_video.gb_frozen_case import (
     validate_frozen_input,
 )
 from remix_reference_video.measurement import MeasurementError
+from remix_reference_video.path_contracts import PathContractError, resolve_asset_snapshot_path
 from remix_reference_video.storage import read_json_object
 
 
 class GBFrozenCaseTests(unittest.TestCase):
+    def test_relative_path_v1_resolves_nested_files_without_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            assets = root / "assets"
+            nested = assets / "photos" / "detail.jpg"
+            nested.parent.mkdir(parents=True)
+            nested.write_bytes(b"detail")
+            self.assertEqual(
+                resolve_asset_snapshot_path(assets, "photos/detail.jpg", "relative_path_v1"),
+                nested,
+            )
+            for invalid in ("/tmp/detail.jpg", "../detail.jpg", "photos/../detail.jpg", "photos\\detail.jpg"):
+                with self.subTest(invalid):
+                    with self.assertRaises(PathContractError):
+                        resolve_asset_snapshot_path(assets, invalid, "relative_path_v1")
+            link = assets / "linked"
+            link.symlink_to(nested.parent, target_is_directory=True)
+            with self.assertRaisesRegex(PathContractError, "symlink"):
+                resolve_asset_snapshot_path(assets, "linked/detail.jpg", "relative_path_v1")
+
+    def test_legacy_snapshot_keeps_direct_child_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            assets = Path(temporary).resolve()
+            nested = assets / "photos" / "detail.jpg"
+            nested.parent.mkdir()
+            nested.write_bytes(b"detail")
+            with self.assertRaisesRegex(PathContractError, "direct child"):
+                resolve_asset_snapshot_path(assets, "photos/detail.jpg", None)
+
     def test_prepare_case_freezes_inputs_without_approvals(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
