@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from remix_reference_video.project_initialization import (
     ProjectInitializationError,
     ProjectInitializationStore,
     claim_objects,
+    pick_local_input_path,
     validate_local_input_path,
 )
 from remix_reference_video.runtime_resolver import RuntimeResolver, RuntimeUnavailable
@@ -65,6 +67,31 @@ class ProjectInitializationContractTests(unittest.TestCase):
             validate_local_input_path(link, kind="reference")
         with self.assertRaisesRegex(ProjectInitializationError, "directory"):
             validate_local_input_path(self.reference, kind="asset_root")
+
+    def test_native_picker_uses_fixed_macos_scripts_and_handles_cancel(self) -> None:
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def selected(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return subprocess.CompletedProcess(argv, 0, stdout=str(self.reference) + "\n", stderr="")
+
+        result = pick_local_input_path("reference_video", runner=selected, platform_name="darwin")
+        self.assertEqual(result["status"], "selected")
+        self.assertEqual(result["path"], str(self.reference))
+        self.assertEqual(calls[0][0][0], "/usr/bin/osascript")
+        self.assertNotIn(str(self.reference), calls[0][0])
+        self.assertFalse(calls[0][1].get("shell", True))
+
+        def cancelled(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="User canceled. (-128)\n")
+
+        self.assertEqual(
+            pick_local_input_path("asset_directory", runner=cancelled, platform_name="darwin")["status"],
+            "cancelled",
+        )
+        self.assertEqual(pick_local_input_path("asset_directory", platform_name="linux")["status"], "unavailable")
+        with self.assertRaisesRegex(ProjectInitializationError, "picker mode"):
+            pick_local_input_path("arbitrary", runner=selected, platform_name="darwin")
 
     def test_store_normalizes_draft_and_enforces_revision_and_idempotency(self) -> None:
         store = ProjectInitializationStore(self.workspace)

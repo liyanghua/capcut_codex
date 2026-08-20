@@ -1,6 +1,6 @@
 (() => {
   const runId = document.body.dataset.runId;
-  const state = { workspace: null, review: null, session: null, selected: null, media: null, preview: null, request: null, reloadPending: false };
+  const state = { workspace: null, review: null, session: null, selected: null, media: null, preview: null, request: null, reloadPending: false, nonce: document.querySelector('meta[name="local-session-nonce"]')?.content || "", protectedQueue: Promise.resolve() };
   const $ = (selector) => document.querySelector(selector);
   const esc = (value) => String(value ?? "").replace(/[&<>\"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
   const api = (path, options = {}) => fetch(`/api/v1/runs/${encodeURIComponent(runId)}${path}`, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options }).then(async (response) => {
@@ -9,6 +9,17 @@
     if (!response.ok) throw Object.assign(new Error(body?.detail?.message || body?.message || body || "请求失败"), { response, body });
     return body;
   });
+  const protectedApi = (path, payload) => {
+    const operation = async () => {
+      const response = await fetch(`/api/v1/runs/${encodeURIComponent(runId)}${path}`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Local-Nonce": state.nonce }, body: JSON.stringify(payload) });
+      const body = await response.json().catch(() => ({}));
+      if (body.next_nonce) { state.nonce = body.next_nonce; document.querySelector('meta[name="local-session-nonce"]').content = state.nonce; }
+      if (!response.ok) throw Object.assign(new Error(body.message || body.detail?.message || "请求失败"), { response, body });
+      return body;
+    };
+    state.protectedQueue = state.protectedQueue.then(operation, operation);
+    return state.protectedQueue;
+  };
   const toast = (message) => { $("#toast").textContent = message; $("#toast").classList.add("visible"); setTimeout(() => $("#toast").classList.remove("visible"), 2600); };
   const mediaUrl = (path) => `/api/v1/runs/${encodeURIComponent(runId)}/media/${path.split("/").map(encodeURIComponent).join("/")}`;
   const formatTime = (seconds) => { const value = Number(seconds); if (!Number.isFinite(value)) return "00:00"; return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(Math.floor(value % 60)).padStart(2, "0")}`; };
@@ -272,6 +283,31 @@
     }).join("") || `<div class="empty-rail">当前阶段暂无质量检查</div>`;
   }
 
+  function materialEvidencePause() {
+    return Boolean(state.workspace?.decision_context?.material_evidence);
+  }
+
+  function renderMaterialEvidence() {
+    const evidence = state.workspace?.decision_context?.material_evidence;
+    const card = $("#material-evidence-card");
+    card.hidden = !evidence;
+    $("#decision-actions").hidden = Boolean(evidence);
+    $("#decision-note-wrap").hidden = Boolean(evidence);
+    if (!evidence) { $("#material-evidence-editor").innerHTML = ""; return; }
+    const unique = new Map();
+    for (const requirement of evidence.requirements || []) {
+      for (const asset of requirement.candidate_assets || []) {
+        if (!unique.has(asset.asset_id)) unique.set(asset.asset_id, {...asset, fragment_ids: []});
+        unique.get(asset.asset_id).fragment_ids.push(requirement.fragment_id);
+      }
+    }
+    $("#material-evidence-editor").innerHTML = [...unique.values()].map((asset) => {
+      const source = `/api/v1/runs/${encodeURIComponent(runId)}/source-media/${encodeURIComponent(asset.asset_id)}`;
+      const media = asset.media_type === "image" ? `<img src="${source}" alt="素材预览" loading="lazy">` : `<video src="${source}" controls preload="metadata"></video>`;
+      return `<article class="evidence-asset" data-evidence-asset="${esc(asset.asset_id)}" data-source-path="${esc(asset.source_path)}" data-source-sha="${esc(asset.sha256)}" data-media-type="${esc(asset.media_type)}"><div class="evidence-media">${media}</div><div class="evidence-fields"><label class="evidence-check"><input class="evidence-include" type="checkbox">使用并提交该素材证据</label><strong>${esc(asset.source_path)}</strong><span class="muted">关联 ${esc(asset.fragment_ids.join("、"))}</span><label>产品类型<input class="evidence-product" placeholder="例如：透明桌垫"></label><label>画面语义标签<input class="evidence-semantics" placeholder="多个标签用逗号分隔"></label><label>动作标签<input class="evidence-actions" placeholder="多个标签用逗号分隔"></label><label>源文字处理<select class="evidence-overlay"><option value="none">无源文字</option><option value="retain_source_text">保留源文字</option><option value="avoid_source_text">避开源文字</option></select></label>${asset.media_type === "video" ? '<div class="evidence-range"><label>证据开始秒<input class="evidence-start" type="number" min="0" step="0.01"></label><label>证据结束秒<input class="evidence-end" type="number" min="0" step="0.01"></label></div>' : ""}<div class="score-grid">${["semantic","action","composition","color","lighting","technical"].map((key) => `<label>${({semantic:"语义",action:"动作",composition:"构图",color:"色彩",lighting:"光线",technical:"技术"})[key]}<input data-score="${key}" type="number" min="0" max="1" step="0.05" placeholder="0-1"></label>`).join("")}</div><label>评分依据<input class="evidence-score-basis" placeholder="说明你看到的画面证据"></label></div></article>`;
+    }).join("") || '<div class="empty-rail">当前没有可补充的候选素材</div>';
+  }
+
   function renderAssistant() {
     const view = state.workspace;
     const decision = view.decision_context || {};
@@ -292,6 +328,7 @@
     renderStepper();
     renderStageContent();
     renderQualityChecks();
+    renderMaterialEvidence();
     const approve = document.querySelector('[data-action="approve"]');
     approve.disabled = decision.approval_eligibility !== true;
     $("#diagnostics-body").textContent = JSON.stringify({ run_id: view.run_id, state_revision: view.state_revision, package_revision: view.package_revision, current_gate: view.current_gate, preview_mode: view.preview?.mode, execution: view.process?.execution || [], artifacts: view.artifacts || [] }, null, 2);
@@ -299,10 +336,15 @@
 
   function openSession() { return api("/review-session", { method: "POST", body: JSON.stringify({ gate_id: state.workspace.current_gate }) }).then((session) => { state.session = session; }); }
 
-  async function load() {
-    state.workspace = await api("/workspace");
+  async function loadReviewState() {
+    if (materialEvidencePause()) { state.review = null; state.session = null; return; }
     state.review = await api("/review");
     await openSession();
+  }
+
+  async function load() {
+    state.workspace = await api("/workspace");
+    await loadReviewState();
     renderAssistant();
     renderRail();
     renderTimeline();
@@ -320,7 +362,7 @@
     const selected = state.selected ? { type: state.selected.type, id: state.selected.id } : null;
     const detailOpen = $("#object-detail").hidden === false;
     state.workspace = current;
-    state.review = await api("/review");
+    await loadReviewState();
     renderAssistant();
     renderRail();
     renderTimeline();
@@ -362,6 +404,7 @@
   }
 
   async function decide(action) {
+    if (materialEvidencePause()) { toast("请先补充素材业务证据"); return; }
     if (action === "request_changes") { openChangeDialog(); return; }
     const note = $("#decision-note").value.trim(); if (action === "reject" && !note) { toast("驳回需要填写业务原因"); return; }
     const identity = state.session.review_identity;
@@ -447,6 +490,31 @@
     } catch (error) { toast(error.message); }
   }
 
+  function splitTags(value) { return String(value || "").split(/[，,]/).map((item) => item.trim()).filter(Boolean); }
+
+  async function submitMaterialEvidence() {
+    const rows = [...document.querySelectorAll("[data-evidence-asset]")].filter((row) => row.querySelector(".evidence-include")?.checked);
+    if (!rows.length) { toast("请至少勾选一个素材并填写证据"); return; }
+    try {
+      const annotations = rows.map((row) => {
+        const scores = Object.fromEntries([...row.querySelectorAll("[data-score]")].map((input) => [input.dataset.score, Number(input.value)]));
+        if (Object.values(scores).some((value) => !Number.isFinite(value) || value < 0 || value > 1)) throw new Error("六项评分都必须填写 0 到 1");
+        const product = row.querySelector(".evidence-product")?.value.trim();
+        const semantics = splitTags(row.querySelector(".evidence-semantics")?.value);
+        const actions = splitTags(row.querySelector(".evidence-actions")?.value);
+        if (!product || !semantics.length || !actions.length) throw new Error("产品类型、语义标签和动作标签不能为空");
+        const mediaType = row.dataset.mediaType;
+        const evidenceWindow = mediaType === "video" ? { kind: "time_range", start_seconds: Number(row.querySelector(".evidence-start")?.value), end_seconds: Number(row.querySelector(".evidence-end")?.value) } : { kind: "frame", frame_path: row.dataset.sourcePath };
+        return { asset_id: row.dataset.evidenceAsset, source_path: row.dataset.sourcePath, sha256: row.dataset.sourceSha, evidence_source: "manual_operator", product_type: product, semantic_tags: semantics, action_tags: actions, overlay_decision: row.querySelector(".evidence-overlay")?.value, evidence_window: evidenceWindow, scores, score_basis: row.querySelector(".evidence-score-basis")?.value.trim() || "人工画面审核" };
+      });
+      const hashes = state.workspace.decision_context.material_evidence.submission_hashes || {};
+      const result = await protectedApi("/material-evidence", { annotations, expected_requirements_sha256: hashes["material_evidence_requirements.json"], expected_asset_profiles_sha256: hashes["asset_profiles.json"], request_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID() });
+      toast(result.resume_status === "awaiting_user" ? "证据已提交，已进入下一审核步骤" : "证据已提交，流程继续执行");
+      const current = await api("/workspace");
+      await refreshWorkspace(current);
+    } catch (error) { toast(error.message); }
+  }
+
   $("#play-toggle").addEventListener("click", () => { if (!state.media || !state.media.play) return; if (state.media.paused) state.media.play(); else state.media.pause(); });
   $("#diagnostics-toggle").addEventListener("click", () => { $("#diagnostics").open = !$("#diagnostics").open; });
   $("#detail-close").addEventListener("click", () => { $("#object-detail").hidden = true; state.selected = null; renderRail(); });
@@ -455,6 +523,7 @@
   $("[data-preview]").addEventListener("click", previewChange);
   $("[data-confirm]").addEventListener("click", confirmChange);
   $("#change-type").addEventListener("change", renderChangeTargets);
-  window.__workbench = { state, selectObject, renderDetail, updatePlayhead, refreshWorkspace, mediaUrl };
+  $("#submit-material-evidence").addEventListener("click", submitMaterialEvidence);
+  window.__workbench = { state, selectObject, renderDetail, updatePlayhead, refreshWorkspace, mediaUrl, submitMaterialEvidence };
   load().catch((error) => { $("#connection-status").textContent = "需要刷新"; toast(error.message); });
 })();

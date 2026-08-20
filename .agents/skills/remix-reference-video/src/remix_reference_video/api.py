@@ -7,6 +7,7 @@ import hashlib
 import html
 import mimetypes
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -21,6 +22,17 @@ except ImportError:  # pragma: no cover - exercised by non-API installations
 
 from .change_service import ChangeConflict, ChangeImpactAnalyzer, ChangeService, WorkbenchOrchestrator
 from .contracts import CANONICAL_GATE_ORDER
+from .local_session import LocalSessionError, LocalSessionStore
+from .material_evidence import MaterialEvidenceError, MaterialEvidenceService
+from .path_contracts import PathContractError, resolve_asset_snapshot_path
+from .production_runtime import ProductionRuntimeConfig
+from .project_initialization import (
+    ProjectInitializationConflict,
+    ProjectInitializationError,
+    ProjectInitializationStore,
+    describe_local_input_path,
+    pick_local_input_path,
+)
 from .review_session import ReviewSessionError, ReviewSessionService
 from .review_view import ReviewViewBuilder, ReviewViewError
 from .run_registry import RunRegistry, RunRegistryError
@@ -177,10 +189,147 @@ def create_app(
     workspace = Path(workspace_root).resolve(strict=True)
     projector = ProgressProjector(workspace)
     registry = RunRegistry(workspace)
+    projects = ProjectInitializationStore(workspace)
+    local_sessions = LocalSessionStore()
     ui_mode = os.environ.get("WORKBENCH_UI_MODE", "legacy").strip().lower()
     if ui_mode not in {"legacy", "workspace"}:
         ui_mode = "legacy"
     app = FastAPI(title="Remix Review Workbench", version="0.2.0")
+
+    def issue_local_page(template_name: str, **replacements: str) -> Any:
+        session_id, nonce = local_sessions.issue()
+        template = (Path(__file__).resolve().parent / "templates" / template_name).read_text(encoding="utf-8")
+        values = {"__LOCAL_NONCE__": html.escape(nonce, quote=True), **replacements}
+        for marker, value in values.items():
+            template = template.replace(marker, value)
+        response = HTMLResponse(template)
+        response.set_cookie(
+            "local_session_id", session_id, httponly=True, samesite="strict",
+            secure=False, max_age=900, path="/",
+        )
+        return response
+
+    def rotate_local_nonce(request: FastAPIRequest) -> str:
+        try:
+            return local_sessions.rotate(
+                peer_host=request.client.host if request.client else None,
+                host=request.headers.get("host"), origin=request.headers.get("origin"),
+                scheme=request.url.scheme, session_id=request.cookies.get("local_session_id"),
+                nonce=request.headers.get("x-local-nonce"),
+            )
+        except LocalSessionError as error:
+            raise HTTPException(
+                status_code=403,
+                detail={"error_code": "local_session_rejected", "message": str(error)},
+            ) from None
+
+    @app.get("/workbench", response_class=HTMLResponse)
+    def project_list_page() -> Any:
+        return issue_local_page("project_list.html")
+
+    @app.get("/workbench/projects/new", response_class=HTMLResponse)
+    def project_new_page() -> Any:
+        return issue_local_page("project_initialization.html", __PROJECT_ID__="")
+
+    @app.get("/workbench/projects/{project_id}/stage0", response_class=HTMLResponse)
+    def project_stage0_page(project_id: str) -> Any:
+        try:
+            projects.read_draft(project_id)
+        except (ProjectInitializationError, StorageError, OSError):
+            raise HTTPException(status_code=404, detail="project not found") from None
+        return issue_local_page(
+            "project_initialization.html",
+            __PROJECT_ID__=html.escape(project_id, quote=True),
+        )
+
+    @app.get("/api/v1/projects")
+    def list_projects() -> list[dict[str, object]]:
+        return projects.list_drafts()
+
+    @app.get("/api/v1/projects/{project_id}")
+    def read_project(project_id: str) -> dict[str, object]:
+        try:
+            draft = projects.read_draft(project_id)
+        except (ProjectInitializationError, StorageError, OSError):
+            raise HTTPException(status_code=404, detail="project not found") from None
+        project_root = projects.projects_root / project_id
+        report = read_json_object(project_root / "stage0_report.json") if (project_root / "stage0_report.json").is_file() else None
+        state = read_json_object(project_root / "project_state.json") if (project_root / "project_state.json").is_file() else None
+        return {"draft": draft, "stage0_report": report, "project_state": state}
+
+    @app.post("/api/v1/projects/path-validation")
+    def validate_project_path(request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        return {**describe_local_input_path(payload.get("path"), mode=str(payload.get("mode", ""))), "next_nonce": next_nonce}
+
+    @app.post("/api/v1/projects/path-picker")
+    def pick_project_path(request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        try:
+            result = pick_local_input_path(str(payload.get("mode", "")))
+        except ProjectInitializationError as error:
+            return JSONResponse(status_code=422, content={"error_code": "invalid_picker_mode", "message": str(error), "next_nonce": next_nonce})
+        return {**result, "next_nonce": next_nonce}
+
+    @app.post("/api/v1/projects/drafts")
+    def save_project_draft(request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        try:
+            draft = projects.save_draft(
+                payload,
+                actor=actor,
+                request_id=str(payload.get("request_id", "")),
+                idempotency_key=str(payload.get("idempotency_key", "")),
+                project_id=str(payload["project_id"]) if payload.get("project_id") else None,
+                expected_revision=int(payload["expected_revision"]) if payload.get("expected_revision") is not None else None,
+            )
+        except ProjectInitializationConflict as error:
+            return JSONResponse(status_code=409, content={"error_code": "project_conflict", "message": str(error), "next_nonce": next_nonce})
+        except (ProjectInitializationError, ValueError) as error:
+            return JSONResponse(status_code=422, content={"error_code": "invalid_project", "message": str(error), "next_nonce": next_nonce})
+        return {"draft": draft, "project_url": f"/workbench/projects/{draft['project_id']}/stage0", "next_nonce": next_nonce}
+
+    @app.post("/api/v1/projects/{project_id}/stage0")
+    def run_project_stage0(project_id: str, request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        try:
+            result = projects.run_stage0(
+                project_id, actor=actor, request_id=str(payload.get("request_id", "")),
+                idempotency_key=str(payload.get("idempotency_key", "")),
+            )
+        except ProjectInitializationConflict as error:
+            return JSONResponse(status_code=409, content={"error_code": "project_conflict", "message": str(error), "next_nonce": next_nonce})
+        except (ProjectInitializationError, StorageError, OSError) as error:
+            return JSONResponse(status_code=422, content={"error_code": "stage0_failed", "message": str(error), "next_nonce": next_nonce})
+        return {"stage0_report": result, "next_nonce": next_nonce}
+
+    @app.post("/api/v1/projects/{project_id}/freeze")
+    def freeze_project(project_id: str, request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        try:
+            result = projects.freeze(
+                project_id,
+                expected_draft_revision=int(payload.get("draft_revision", -1)),
+                expected_report_sha256=str(payload.get("report_sha256", "")),
+                actor=actor, request_id=str(payload.get("request_id", "")),
+                idempotency_key=str(payload.get("idempotency_key", "")),
+                date=str(payload.get("date") or date.today().isoformat()),
+            )
+        except (ProjectInitializationConflict, ProjectInitializationError, StorageError, OSError, ValueError) as error:
+            return JSONResponse(status_code=409, content={"error_code": "freeze_conflict", "message": str(error), "next_nonce": next_nonce})
+        return {"project": result, "next_nonce": next_nonce}
+
+    @app.post("/api/v1/projects/{project_id}/start-cold")
+    def start_project_cold(project_id: str, request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        try:
+            result = projects.start_cold(
+                project_id, actor=actor, request_id=str(payload.get("request_id", "")),
+                idempotency_key=str(payload.get("idempotency_key", "")),
+            )
+        except (ProjectInitializationConflict, ProjectInitializationError, StorageError, OSError) as error:
+            return JSONResponse(status_code=409, content={"error_code": "start_cold_conflict", "message": str(error), "next_nonce": next_nonce})
+        return {"project": result, "run_url": f"/workbench/runs/{result['run_id']}" if result.get("run_id") else None, "next_nonce": next_nonce}
 
     def run_task(run_id: str) -> Path:
         try:
@@ -194,6 +343,8 @@ def create_app(
         gates = state.get("gate_status")
         if not isinstance(gates, Mapping):
             raise HTTPException(status_code=409, detail={"error_code":"invalid_state","message":"gate_status is invalid"})
+        if state.get("active_stage") == "collect-material-evidence":
+            return "gate3_material_selection"
         for gate_id in CANONICAL_GATE_ORDER:
             if gates.get(gate_id) in {"awaiting_user", "stale", "blocked", "rejected"}:
                 return gate_id
@@ -294,6 +445,24 @@ def create_app(
             return ReviewSessionService(task_root, actor=actor, role=role).open(gate_id)
         except ReviewSessionError as error:
             raise HTTPException(status_code=409, detail={"error_code":"review_conflict","message":str(error)}) from None
+
+    @app.post("/api/v1/runs/{run_id}/material-evidence")
+    def submit_material_evidence(run_id: str, request: FastAPIRequest, payload: dict[str, object] = Body(...)) -> Any:
+        next_nonce = rotate_local_nonce(request)
+        task_root = run_task(run_id)
+        try:
+            result = MaterialEvidenceService(
+                task_root, actor=actor, role=role, runner_factory=runner_factory,
+            ).submit(
+                annotations=payload.get("annotations"),
+                expected_requirements_sha256=str(payload.get("expected_requirements_sha256", "")),
+                expected_asset_profiles_sha256=str(payload.get("expected_asset_profiles_sha256", "")),
+                request_id=str(payload.get("request_id", "")),
+                idempotency_key=str(payload.get("idempotency_key", "")),
+            )
+        except MaterialEvidenceError as error:
+            return JSONResponse(status_code=409, content={"error_code": "material_evidence_conflict", "message": str(error), "next_nonce": next_nonce})
+        return {**result, "next_nonce": next_nonce}
 
     @app.post("/api/v1/runs/{run_id}/review-session/events")
     def review_event(run_id: str, payload: dict[str, object] = Body(...)) -> dict[str, object]:
@@ -419,14 +588,53 @@ def create_app(
         chunk = data[start:end + 1]
         return Response(status_code=206, content=chunk, media_type=media_type, headers={**headers,"Content-Range":f"bytes {start}-{end}/{len(data)}","Content-Length":str(len(chunk))})
 
+    @app.get("/api/v1/runs/{run_id}/source-media/{asset_id}")
+    def source_media(run_id: str, asset_id: str, request: FastAPIRequest) -> Any:
+        task_root = run_task(run_id)
+        try:
+            config = ProductionRuntimeConfig.from_file(task_root / "production_runtime_config.json")
+            profiles = read_json_object(config.asset_profiles_path).get("asset_profiles")
+            if not isinstance(profiles, list):
+                raise ValueError("asset profiles are invalid")
+            profile = next(
+                row for row in profiles
+                if isinstance(row, Mapping) and row.get("asset_id") == asset_id
+            )
+            relative = str(profile.get("source_path", ""))
+            frozen = read_json_object(task_root / "g_b_frozen_input_snapshot.json")
+            path = resolve_asset_snapshot_path(
+                config.asset_root, relative, frozen.get("asset_snapshot_contract_version"),
+            )
+            expected = profile.get("sha256")
+            with path.open("rb") as stream:
+                actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            if actual != expected or frozen.get("asset_snapshot", {}).get(relative) != actual:
+                raise ValueError("source media hash is stale")
+        except (StopIteration, KeyError, OSError, StorageError, ValueError, PathContractError):
+            raise HTTPException(status_code=404, detail="source media not found") from None
+        data = path.read_bytes()
+        media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        etag = f'"sha256-{actual}"'
+        headers = {"ETag": etag, "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=300"}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        byte_range = request.headers.get("range")
+        if not byte_range:
+            return Response(content=data, media_type=media_type, headers=headers)
+        parsed = _parse_byte_range(byte_range, len(data))
+        if parsed is None:
+            return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{len(data)}"})
+        start, end = parsed
+        chunk = data[start:end + 1]
+        return Response(status_code=206, content=chunk, media_type=media_type, headers={**headers, "Content-Range": f"bytes {start}-{end}/{len(data)}", "Content-Length": str(len(chunk))})
+
     static_root = Path(__file__).resolve().parent
 
     @app.get("/workbench/runs/{run_id}", response_class=HTMLResponse)
-    def workbench_page(run_id: str) -> str:
+    def workbench_page(run_id: str) -> Any:
         run_task(run_id)
         template_name = "review_workbench.html" if ui_mode == "workspace" else "review_workbench_legacy.html"
-        template = (static_root / "templates" / template_name).read_text(encoding="utf-8")
-        return template.replace("__RUN_ID__", html.escape(run_id, quote=True))
+        return issue_local_page(template_name, __RUN_ID__=html.escape(run_id, quote=True))
 
     @app.get("/static/review_workbench.js")
     def workbench_js() -> Response:
@@ -437,6 +645,14 @@ def create_app(
     def workbench_css() -> Response:
         name = "review_workbench.css" if ui_mode == "workspace" else "review_workbench_legacy.css"
         return Response(content=(static_root / "static" / name).read_text(encoding="utf-8"), media_type="text/css")
+
+    @app.get("/static/project_initialization.js")
+    def project_initialization_js() -> Response:
+        return Response(content=(static_root / "static" / "project_initialization.js").read_text(encoding="utf-8"), media_type="text/javascript")
+
+    @app.get("/static/project_initialization.css")
+    def project_initialization_css() -> Response:
+        return Response(content=(static_root / "static" / "project_initialization.css").read_text(encoding="utf-8"), media_type="text/css")
 
     return app
 

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from .snapshot_schema_validator import SnapshotSchemaError, SnapshotSchemaValidator
+from .storage import TaskStorage, atomic_write_json, read_json_object
 
 
 _ENVELOPE = {
@@ -18,9 +24,159 @@ class MaterialEvidenceError(ValueError):
     pass
 
 
+class MaterialEvidenceService:
+    """Persist current operator evidence and resume the paused creative run."""
+
+    def __init__(
+        self,
+        task_root: Path,
+        *,
+        actor: str,
+        role: str = "operator",
+        runner_factory: object | None = None,
+    ) -> None:
+        self.root = Path(task_root).resolve(strict=True)
+        if not actor.strip() or role not in {"operator", "owner"}:
+            raise MaterialEvidenceError("current operator identity is invalid")
+        self.actor = actor.strip()
+        self.role = role
+        self.store = TaskStorage(self.root)
+        self.runner_factory = runner_factory or self._real_runner
+
+    def submit(
+        self,
+        *,
+        annotations: object,
+        expected_requirements_sha256: str,
+        expected_asset_profiles_sha256: str,
+        request_id: str,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        if not isinstance(annotations, list) or not request_id.strip() or not idempotency_key.strip():
+            raise MaterialEvidenceError("annotations, request_id and idempotency_key are required")
+        requirements_path = self.root / "material_evidence_requirements.json"
+        profiles_path = self.root / "asset_profiles.json"
+        if (
+            not requirements_path.is_file()
+            or not profiles_path.is_file()
+            or _file_sha256(requirements_path) != expected_requirements_sha256
+            or _file_sha256(profiles_path) != expected_asset_profiles_sha256
+        ):
+            raise MaterialEvidenceError("material evidence inputs are stale")
+        payload_hash = _digest({
+            "annotations": annotations,
+            "requirements_sha256": expected_requirements_sha256,
+            "asset_profiles_sha256": expected_asset_profiles_sha256,
+        })
+        ledger_path = self.root / ".idempotency" / f"material-evidence-{hashlib.sha256(idempotency_key.encode()).hexdigest()}.json"
+        if ledger_path.is_file():
+            ledger = read_json_object(ledger_path)
+            if ledger.get("payload_hash") != payload_hash:
+                raise MaterialEvidenceError("idempotency key conflict")
+            return dict(ledger["result"])
+        state = self.store.read_state()
+        if state.get("active_stage") != "collect-material-evidence" or not any(
+            isinstance(row, Mapping) and row.get("category") == "manual_classification_required"
+            for row in state.get("blockers", [])
+        ):
+            raise MaterialEvidenceError("run is not waiting for material evidence")
+        profiles_artifact = read_json_object(profiles_path)
+        profiles = profiles_artifact.get("asset_profiles")
+        if not isinstance(profiles, list):
+            raise MaterialEvidenceError("asset profiles are invalid")
+        artifact = {
+            **_ENVELOPE,
+            "artifact_type": "material_evidence_annotations",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:material-evidence-annotations",
+            "lifecycle_status": "ready",
+            "input_hashes": {
+                "asset_profiles.json": expected_asset_profiles_sha256,
+                "material_evidence_requirements.json": expected_requirements_sha256,
+            },
+            "annotations": annotations,
+        }
+        try:
+            SnapshotSchemaValidator().assert_valid(artifact, "material-evidence-annotations.schema.json")
+        except SnapshotSchemaError as error:
+            raise MaterialEvidenceError(f"material evidence schema validation failed: {error}") from None
+        merge_material_evidence(profiles, artifact)
+        staging = self.root / ".staging" / f"material-evidence-{uuid.uuid4()}"
+        staged = staging / "material_evidence_annotations.json"
+        atomic_write_json(staged, artifact)
+        with self.store.invocation_lock():
+            current = self.store.read_state()
+            if current.get("state_revision") != state.get("state_revision"):
+                raise MaterialEvidenceError("material evidence state is stale")
+            final_path = self.root / "material_evidence_annotations.json"
+            if final_path.exists():
+                version = self.root / "versions" / "material_evidence_annotations" / f"r{current['state_revision']}.json"
+                version.parent.mkdir(parents=True, exist_ok=True)
+                final_path.replace(version)
+            staged.replace(final_path)
+            downstream = self._downstream_stage_ids()
+            updated = self.store.update_state(
+                lambda value: {
+                    **value,
+                    "active_stage": "build-material-evidence-requirements",
+                    "active_command": None,
+                    "blockers": [
+                        row for row in value.get("blockers", [])
+                        if not (isinstance(row, Mapping) and row.get("category") == "manual_classification_required")
+                    ],
+                    "stage_status": {
+                        **value.get("stage_status", {}),
+                        **{stage_id: "not_started" for stage_id in downstream if stage_id in value.get("stage_status", {})},
+                    },
+                    "cache_summary": {
+                        key: row for key, row in value.get("cache_summary", {}).items() if key not in downstream
+                    },
+                },
+                expected_revision=int(current["state_revision"]),
+            )
+            self.store.append_event(
+                {
+                    "event_type": "material_evidence.submitted", "actor": self.actor,
+                    "role": self.role, "request_id": request_id,
+                    "requirements_sha256": expected_requirements_sha256,
+                },
+                state_revision=int(updated["state_revision"]),
+            )
+        if staging.exists():
+            staging.rmdir()
+        runner = self.runner_factory(self.root)
+        result = runner.run(resume=True)
+        response = {
+            "run_id": str(state.get("run_id", "")),
+            "status": "submitted",
+            "resume_status": str(getattr(result, "status", "unknown")),
+            "annotation_sha256": _file_sha256(self.root / "material_evidence_annotations.json"),
+        }
+        atomic_write_json(ledger_path, {"payload_hash": payload_hash, "result": response})
+        return response
+
+    @staticmethod
+    def _downstream_stage_ids() -> list[str]:
+        from .orchestrator import creative_dag
+
+        order = [node.node_id for node in creative_dag()]
+        start = order.index("build-material-evidence-requirements")
+        return order[start:]
+
+    @staticmethod
+    def _real_runner(task_root: Path) -> object:
+        from .change_service import WorkbenchOrchestrator
+
+        return WorkbenchOrchestrator._real_runner(task_root)
+
+
 def _digest(value: object) -> str:
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def merge_material_evidence(
@@ -155,4 +311,4 @@ def build_material_evidence_requirements(
     }
 
 
-__all__ = ["MaterialEvidenceError", "build_material_evidence_requirements", "merge_material_evidence"]
+__all__ = ["MaterialEvidenceError", "MaterialEvidenceService", "build_material_evidence_requirements", "merge_material_evidence"]

@@ -232,6 +232,10 @@ class WorkbenchWorkspaceBuilder:
                     "status": material_evidence.get("status"),
                     "requirements": material_evidence.get("requirements", []),
                     "input_hashes": material_evidence.get("input_hashes", {}),
+                    "submission_hashes": {
+                        "material_evidence_requirements.json": self._file_sha256("material_evidence_requirements.json"),
+                        "asset_profiles.json": self._file_sha256("asset_profiles.json") if self._exists("asset_profiles.json") else None,
+                    },
                 } if collecting_material_evidence and isinstance(material_evidence, Mapping) else None,
                 "voice_preflight": self._artifact_summary(gate_id, preflight, "voice_preflight"),
                 "voice_preflight_details": self._voice_preflight_details(gate_id, preflight),

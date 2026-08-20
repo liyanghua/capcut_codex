@@ -8,9 +8,11 @@ from pathlib import Path
 from remix_reference_video.adapters.retrieval import RetrievalAdapter
 from remix_reference_video.material_evidence import (
     MaterialEvidenceError,
+    MaterialEvidenceService,
     build_material_evidence_requirements,
     merge_material_evidence,
 )
+from remix_reference_video.storage import TaskStorage, atomic_write_json, read_json_object
 
 
 class MaterialEvidenceTests(unittest.TestCase):
@@ -73,6 +75,83 @@ class MaterialEvidenceTests(unittest.TestCase):
             with self.subTest(message):
                 with self.assertRaisesRegex(MaterialEvidenceError, message):
                     merge_material_evidence(self.profiles, value)
+
+    def test_service_submits_current_annotations_resets_downstream_and_resumes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            store = TaskStorage(root)
+            store.initialize_state({
+                "run_id": "run-1", "state_revision": 0,
+                "active_stage": "collect-material-evidence", "active_command": None,
+                "stage_status": {
+                    "build-material-evidence-requirements": "not_started",
+                    "build-coverage-authoritative": "succeeded", "match-assets": "succeeded",
+                },
+                "gate_status": {
+                    "gate1": "approved", "gate2": "approved", "gate3_material_selection": "not_ready",
+                    "gate3_evidence_closure": "not_ready", "gate3": "not_ready",
+                    "gate4_pre_generation": "not_ready", "gate4_post_generation": "not_ready",
+                    "gate4": "not_ready", "gate5": "not_ready",
+                },
+                "decisions": [], "artifacts": {},
+                "blockers": [{"category": "manual_classification_required", "requires_user": True}],
+                "cache_summary": {"build-coverage-authoritative": {"status": "hit"}, "match-assets": {"status": "hit"}},
+            })
+            atomic_write_json(root / "asset_profiles.json", {"artifact_type": "asset_profiles", "asset_profiles": self.profiles})
+            requirements = build_material_evidence_requirements(self.baseline, self.profiles, None)
+            atomic_write_json(root / "material_evidence_requirements.json", requirements)
+            requirements_hash = hashlib.sha256((root / "material_evidence_requirements.json").read_bytes()).hexdigest()
+            profiles_hash = hashlib.sha256((root / "asset_profiles.json").read_bytes()).hexdigest()
+            calls: list[bool] = []
+
+            class FakeRunner:
+                def run(inner_self, *, resume: bool = False):
+                    calls.append(resume)
+                    return type("Result", (), {"status": "awaiting_user"})()
+
+            service = MaterialEvidenceService(root, actor="operator-a", role="operator", runner_factory=lambda _: FakeRunner())
+            invalid = self._annotations()["annotations"]
+            invalid[0]["decision"] = "approved"
+            with self.assertRaisesRegex(MaterialEvidenceError, "schema"):
+                service.submit(
+                    annotations=invalid,
+                    expected_requirements_sha256=requirements_hash,
+                    expected_asset_profiles_sha256=profiles_hash,
+                    request_id="evidence-invalid", idempotency_key="evidence-key-invalid",
+                )
+            result = service.submit(
+                annotations=self._annotations()["annotations"],
+                expected_requirements_sha256=requirements_hash,
+                expected_asset_profiles_sha256=profiles_hash,
+                request_id="evidence-1", idempotency_key="evidence-key-1",
+            )
+            replay = service.submit(
+                annotations=self._annotations()["annotations"],
+                expected_requirements_sha256=requirements_hash,
+                expected_asset_profiles_sha256=profiles_hash,
+                request_id="evidence-1", idempotency_key="evidence-key-1",
+            )
+
+            self.assertEqual(calls, [True])
+            self.assertEqual(result, replay)
+            artifact = read_json_object(root / "material_evidence_annotations.json")
+            self.assertEqual(artifact["input_hashes"], {
+                "asset_profiles.json": profiles_hash,
+                "material_evidence_requirements.json": requirements_hash,
+            })
+            state = store.read_state()
+            self.assertEqual(state["blockers"], [])
+            self.assertEqual(state["stage_status"]["build-coverage-authoritative"], "not_started")
+            self.assertNotIn("build-coverage-authoritative", state["cache_summary"])
+            self.assertEqual(result["resume_status"], "awaiting_user")
+
+            with self.assertRaisesRegex(MaterialEvidenceError, "stale"):
+                service.submit(
+                    annotations=self._annotations()["annotations"],
+                    expected_requirements_sha256="0" * 64,
+                    expected_asset_profiles_sha256=profiles_hash,
+                    request_id="evidence-2", idempotency_key="evidence-key-2",
+                )
 
 
 if __name__ == "__main__":

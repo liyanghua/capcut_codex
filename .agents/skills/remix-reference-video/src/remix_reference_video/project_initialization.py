@@ -8,6 +8,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import unicodedata
 import uuid
 from argparse import Namespace
@@ -101,6 +103,77 @@ def validate_local_input_path(path: Path, *, kind: str) -> Path:
     else:
         raise ProjectInitializationError(f"unsupported path kind: {kind}")
     return resolved
+
+
+def describe_local_input_path(path: object, *, mode: str) -> dict[str, object]:
+    kind = {"reference_video": "reference", "asset_directory": "asset_root"}.get(mode)
+    if kind is None:
+        return {"status": "unsupported", "mode": mode, "path": str(path or ""), "detail": "不支持的选择类型"}
+    value = str(path or "").strip()
+    try:
+        resolved = validate_local_input_path(Path(value), kind=kind)
+    except ProjectInitializationError as error:
+        detail = str(error)
+        if "symlink" in detail:
+            status = "symlink"
+        elif "not readable" in detail:
+            status = "not_readable"
+        elif "unsupported" in detail or "regular file" in detail or "directory" in detail:
+            status = "unsupported"
+        elif "missing" in detail or "absolute" in detail:
+            status = "missing"
+        else:
+            status = "scan_error"
+        return {"status": status, "mode": mode, "path": value, "detail": detail}
+    return {
+        "status": "valid",
+        "mode": mode,
+        "path": str(resolved),
+        "basename": resolved.name,
+        "media_type": "video" if kind == "reference" else "directory",
+    }
+
+
+_PICKER_SCRIPTS = {
+    "reference_video": 'POSIX path of (choose file with prompt "选择参考视频" of type {"public.movie"})',
+    "asset_directory": 'POSIX path of (choose folder with prompt "选择自有素材目录")',
+}
+
+
+def pick_local_input_path(
+    mode: str,
+    *,
+    runner: object = subprocess.run,
+    platform_name: str = sys.platform,
+) -> dict[str, object]:
+    script = _PICKER_SCRIPTS.get(mode)
+    if script is None:
+        raise ProjectInitializationError("unsupported picker mode")
+    if platform_name != "darwin":
+        return {"status": "unavailable", "mode": mode, "detail": "当前系统不支持 macOS 原生选择器，请手动输入绝对路径"}
+    if not callable(runner):
+        raise ProjectInitializationError("picker runner is unavailable")
+    try:
+        completed = runner(
+            ["/usr/bin/osascript", "-e", script],
+            check=False,
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+    except OSError as error:
+        return {"status": "unavailable", "mode": mode, "detail": str(error)}
+    if int(completed.returncode) != 0:
+        detail = str(completed.stderr or "").strip()
+        status = "cancelled" if "-128" in detail or "cancel" in detail.lower() else "unavailable"
+        return {"status": status, "mode": mode, "detail": detail or "原生选择器不可用"}
+    value = str(completed.stdout or "").strip()
+    if not value:
+        return {"status": "cancelled", "mode": mode, "detail": "未选择路径"}
+    validated = describe_local_input_path(value, mode=mode)
+    if validated["status"] != "valid":
+        return validated
+    return {**validated, "status": "selected"}
 
 
 class ProjectInitializationStore:
@@ -538,5 +611,6 @@ class ProjectInitializationStore:
 
 __all__ = [
     "ProjectInitializationConflict", "ProjectInitializationError",
-    "ProjectInitializationStore", "claim_objects", "validate_local_input_path",
+    "ProjectInitializationStore", "claim_objects", "describe_local_input_path",
+    "pick_local_input_path", "validate_local_input_path",
 ]

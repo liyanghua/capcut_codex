@@ -14,11 +14,24 @@ from remix_reference_video.workspace_view import WorkbenchWorkspaceBuilder
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _HARNESS = _SCRIPT_DIR / "client_workbench_harness.js"
 _CLIENT_JS = _SCRIPT_DIR.parent / "src/remix_reference_video/static/review_workbench.js"
+_PROJECT_HARNESS = _SCRIPT_DIR / "client_project_initialization_harness.js"
+_PROJECT_CLIENT_JS = _SCRIPT_DIR.parent / "src/remix_reference_video/static/project_initialization.js"
 
 
 class WorkbenchClientContractTests(unittest.TestCase):
     def test_client_never_uses_full_page_reload(self) -> None:
         self.assertNotIn("location.reload", _CLIENT_JS.read_text(encoding="utf-8"))
+
+    def test_project_initialization_picker_and_draft_handlers_execute(self) -> None:
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node runtime is unavailable")
+        result = subprocess.run(
+            [node, str(_PROJECT_HARNESS)], capture_output=True, text=True,
+            env={**os.environ, "PROJECT_INITIALIZATION_JS": str(_PROJECT_CLIENT_JS)}, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+        self.assertIn("project initialization client contract OK", result.stdout)
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
