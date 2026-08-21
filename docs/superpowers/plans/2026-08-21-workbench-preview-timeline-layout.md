@@ -19,7 +19,7 @@
 **Files:**
 - Modify: `.agents/skills/remix-reference-video/tests/test_workbench_layout.py`
 
-- [ ] **Step 1: Write failing desktop layout assertions**
+- [x] **Step 1: Write failing desktop layout assertions**
 
 Extend `test_three_column_shell_and_main_stage_can_shrink_without_overflow` and `test_preview_uses_container_bounds_instead_of_fixed_video_height` to require:
 
@@ -33,7 +33,7 @@ self.assertEqual(preview.get("max-height"), "100%")
 self.assertNotIn("56vh", TEMPLATE)
 ```
 
-- [ ] **Step 2: Write failing mobile reset assertions**
+- [x] **Step 2: Write failing mobile reset assertions**
 
 Parse the `max-width:820px` block with `_rules()` and assert the concrete contract on the correct selectors:
 
@@ -63,7 +63,7 @@ self.assertEqual(image.get("height"), "auto")
 self.assertEqual(image.get("object-fit"), "contain")
 ```
 
-- [ ] **Step 3: Run the layout tests and verify RED**
+- [x] **Step 3: Run the layout tests and verify RED**
 
 Run:
 
@@ -81,7 +81,7 @@ Expected: FAIL because the desktop grid still uses `minmax(280px,1fr)` with only
 - Modify: `.agents/skills/remix-reference-video/src/remix_reference_video/templates/review_workbench.html`
 - Test: `.agents/skills/remix-reference-video/tests/test_workbench_layout.py`
 
-- [ ] **Step 1: Update the desktop grid and preview box**
+- [x] **Step 1: Update the desktop grid and preview box**
 
 Change the central grid row list and replace only the preview's three sizing declarations. Preserve every other existing `.preview-stage` declaration, including `display:flex`, alignment, `max-width:100%`, background, border radius, `overflow:hidden`, and `position:relative`:
 
@@ -99,7 +99,7 @@ Change the central grid row list and replace only the preview's three sizing dec
 
 Keep existing `overflow-y:auto`, `overflow-x:hidden`, `position:relative`, and media `object-fit:contain` declarations.
 
-- [ ] **Step 2: Add explicit mobile resets**
+- [x] **Step 2: Add explicit mobile resets**
 
 In the existing `@media (max-width:820px)` block set:
 
@@ -116,11 +116,11 @@ In the existing `@media (max-width:820px)` block set:
 }
 ```
 
-- [ ] **Step 3: Remove only the conflicting inline container height**
+- [x] **Step 3: Remove only the conflicting inline container height**
 
 Delete the template's inline `.preview-stage{height:clamp(280px,56vh,620px);min-height:280px}` declaration. Preserve the inline video and image rules unchanged, including video `aspect-ratio:9/16`, image `height:auto`, and `object-fit:contain`.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run:
 
@@ -132,7 +132,7 @@ node --check src/remix_reference_video/static/review_workbench.js
 
 Expected: PASS.
 
-- [ ] **Step 5: Run the complete Skill regression**
+- [x] **Step 5: Run the complete Skill regression**
 
 Run:
 
@@ -145,7 +145,7 @@ git diff --check
 
 Expected: all tests PASS and all checks exit 0.
 
-- [ ] **Step 6: Restart and perform browser measurements**
+- [x] **Step 6: Restart and perform browser measurements**
 
 Restart `workbench-serve` with `WORKBENCH_UI_MODE=workspace`. Open run `gb-cold-1787280937` and verify the spec state matrix at 1280×720, 1440×900, 1280×640, 821×720, 820×720, and 390×844. Do not submit any Gate decision.
 
@@ -158,7 +158,7 @@ At each applicable viewport measure real bounding rectangles and computed styles
 - the right rail does not intersect the central preview or timeline;
 - at 390×844, `.timeline-canvas.scrollWidth > .timeline-canvas.clientWidth`; set a positive `scrollLeft` and confirm it advances while `document.documentElement.scrollWidth <= innerWidth`.
 
-- [ ] **Step 7: Commit the implementation**
+- [x] **Step 7: Commit the implementation**
 
 ```bash
 git add \
