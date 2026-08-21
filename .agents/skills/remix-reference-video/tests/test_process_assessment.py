@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 
 from remix_reference_video.process_assessment import ProcessAssessmentBuilder
+from remix_reference_video.orchestrator import creative_dag
+from remix_reference_video.storage import atomic_write_json
 
 
 class ProcessAssessmentTrustedTimingTests(unittest.TestCase):
@@ -37,6 +41,20 @@ class ProcessAssessmentTrustedTimingTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["human_wait_seconds"]["measurement_status"], "not_measured")
         self.assertEqual(result["metrics"]["operator_touch_seconds"]["measurement_status"], "not_measured")
         self.assertEqual(result["metrics"]["decision_seconds"]["measurement_status"], "not_measured")
+
+    def test_task_root_selects_creative_critical_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            atomic_write_json(root / "g_b_frozen_input_snapshot.json", {"creative_contract_version": "creative_contract_v1"})
+            metrics = [
+                {"execution_stage_id": node.node_id, "attempt_id": node.node_id, "status": "succeeded", "wall_seconds": 1.0}
+                for node in creative_dag() if node.node_id not in {"init", "archive-approved"}
+            ]
+            result = ProcessAssessmentBuilder().build(
+                state={"run_id":"run-1", "decisions":[], "gate_status":{}}, events=[], metrics=metrics,
+                run_id="run-1", execution_mode="track-b-production", task_root=root,
+            )
+            self.assertEqual(result["metrics"]["machine_api_critical_path_seconds"]["measurement_status"], "measured")
 
 
 if __name__ == "__main__": unittest.main()

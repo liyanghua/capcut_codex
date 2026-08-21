@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from .critical_path import CriticalPathCollector
@@ -24,6 +25,7 @@ class ProcessAssessmentBuilder:
         run_id: str,
         execution_mode: str,
         source_paths: Mapping[str, str] | None = None,
+        task_root: Path | None = None,
     ) -> dict[str, Any]:
         if state.get("run_id") not in {run_id, None}:
             raise ProcessAssessmentError("state run_id does not match requested run")
@@ -33,7 +35,7 @@ class ProcessAssessmentBuilder:
             gate = record.get("gate_id")
             if isinstance(gate, str):
                 current[gate] = record
-        critical = CriticalPathCollector().collect(metrics)
+        critical = CriticalPathCollector(task_root=task_root).collect(metrics)
         timing = self._timing(events)
         gate_returns = sum(1 for event in self._dedupe_events(events) if event.get("event_type") in {"gate.returned", "gate.reopened", "rework_completed", "review.rework_completed"})
         valid_decisions = len(approvals)

@@ -257,6 +257,13 @@ class ChangeServiceTests(unittest.TestCase):
         self.assertNotIn("build-narrative-coherence", _IMPACTS["voice"]["stale_stages"])
         self.assertNotIn("validate-visual-layout", _IMPACTS["rerecord"]["stale_stages"])
 
+    def test_creative_preview_uses_the_selected_dag_closure(self) -> None:
+        atomic_write_json(self.root / "g_b_frozen_input_snapshot.json", {"creative_contract_version": "creative_contract_v1"})
+        request = {"change_type":"copy","scope_ids":["line01"],"payload":{"line_ids":["line01"],"text_by_id":{"line01":"改写"},"edit_intent":"rewrite"},"reason":"改写"}
+        preview = self.analyzer.preview(session_id=self.session["session_id"], gate_id="gate3_material_selection", request=request)
+        self.assertIn("generate-script-candidates", preview["stale_stages"])
+        self.assertIn("build-final-content-diagnostic", preview["stale_stages"])
+
     def test_gate2_changes_invalidate_material_evidence_contracts(self) -> None:
         from remix_reference_video.change_service import _IMPACTS
 

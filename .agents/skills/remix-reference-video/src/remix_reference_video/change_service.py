@@ -148,15 +148,21 @@ _IMPACTS["range"]["business_explanation"] = "源范围变化会使 Gate 3 证据
 _TERMINAL_NODES = frozenset({"archive-approved"})
 
 
-def dag_downstream_closure(start_ids: list[str], *, exclude: frozenset[str] = _TERMINAL_NODES) -> list[str]:
+def dag_downstream_closure(
+    start_ids: list[str],
+    *,
+    task_root: Path | None = None,
+    exclude: frozenset[str] = _TERMINAL_NODES,
+) -> list[str]:
     """Compute the downstream stage closure from the current production DAG.
 
     Explicit impact lists must stay consistent with this closure; tests compare
     the two so a DAG change cannot silently diverge from the invalidation tables.
     """
-    from .orchestrator import default_dag
+    from .orchestrator import dag_for_task, default_dag
 
-    nodes = {node.node_id: node for node in default_dag()}
+    dag = dag_for_task(task_root) if task_root is not None else default_dag()
+    nodes = {node.node_id: node for node in dag}
     closure: list[str] = []
     seen: set[str] = set()
     queue: list[str] = list(start_ids)
@@ -484,6 +490,19 @@ class ChangeImpactAnalyzer:
     def _preview(self, *, session_id: str, gate_id: str, request: Mapping[str, object]) -> dict[str, Any]:
         normalized, identity = self.validator.validate(session_id, gate_id, request)
         impact = copy.deepcopy(_IMPACTS[str(normalized["change_type"])])
+        stale_stages = impact.get("stale_stages")
+        # Historical tasks can predate the quality nodes named by the fixed
+        # impact tables. Keep their established recovery range; only a frozen
+        # creative contract derives its closure from the creative DAG.
+        from .orchestrator import CREATIVE_DAG_VERSION, dag_version_for_task
+        if (
+            dag_version_for_task(self.root) == CREATIVE_DAG_VERSION
+            and isinstance(stale_stages, list)
+            and stale_stages
+        ):
+            impact["stale_stages"] = dag_downstream_closure(
+                [str(stale_stages[0])], task_root=self.root,
+            )
         package = read_json_object(self.root / "gate_review_packages" / f"{gate_id}.json")
         estimate = self._estimate(
             tuple(impact["stale_stages"]),

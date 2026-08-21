@@ -40,7 +40,10 @@ class SnapshotStore:
         policy = BaselinePolicy.from_mapping(read_json_object(Path(policy_path).resolve(strict=True)))
         events = read_jsonl_records(self.root / "pipeline_events.jsonl")
         metrics = read_jsonl_records(self.root / "stage_metrics.jsonl")
-        process = ProcessAssessmentBuilder().build(state=state, events=events, metrics=metrics, run_id=run_id, execution_mode=str(state.get("execution_mode", "unknown")))
+        process = ProcessAssessmentBuilder().build(
+            state=state, events=events, metrics=metrics, run_id=run_id,
+            execution_mode=str(state.get("execution_mode", "unknown")), task_root=self.root,
+        )
         frozen = self.root / "g_b_frozen_input_snapshot.json"
         frozen_hash = _sha256(frozen) if frozen.is_file() else ""
         role = "hot" if self.root.name == "hot" else "cold"

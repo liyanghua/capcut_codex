@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
-from .orchestrator import default_dag
+from .orchestrator import dag_for_task, default_dag
 
 
 class CriticalPathError(ValueError):
@@ -15,8 +16,15 @@ class CriticalPathError(ValueError):
 class CriticalPathCollector:
     EXCLUDED = frozenset({"init", "archive-approved"})
 
-    def __init__(self, nodes: Sequence[object] | None = None) -> None:
-        self.nodes = tuple(nodes or default_dag())
+    def __init__(
+        self,
+        nodes: Sequence[object] | None = None,
+        *,
+        task_root: Path | None = None,
+    ) -> None:
+        if nodes is not None and task_root is not None:
+            raise CriticalPathError("provide nodes or task_root, not both")
+        self.nodes = tuple(nodes or (dag_for_task(Path(task_root)) if task_root is not None else default_dag()))
         self.by_id = {node.node_id: node for node in self.nodes if node.node_id not in self.EXCLUDED}
 
     def collect(self, metrics: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
