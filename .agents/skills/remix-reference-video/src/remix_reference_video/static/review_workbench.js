@@ -290,6 +290,7 @@
   function renderMaterialEvidence() {
     const evidence = state.workspace?.decision_context?.material_evidence;
     const card = $("#material-evidence-card");
+    if (!card) return;
     card.hidden = !evidence;
     $("#decision-actions").hidden = Boolean(evidence);
     $("#decision-note-wrap").hidden = Boolean(evidence);

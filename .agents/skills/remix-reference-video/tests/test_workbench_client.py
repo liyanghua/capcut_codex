@@ -100,7 +100,7 @@ class WorkbenchClientContractTests(unittest.TestCase):
             path.write_bytes(b"x")
         self.store.update_state(lambda state: state | {"state_revision": 9})
 
-    def _run_harness(self, view: dict[str, object], *, stale_review: bool = False) -> str:
+    def _run_harness(self, view: dict[str, object], *, stale_review: bool = False, legacy_dom: bool = False) -> str:
         node = shutil.which("node")
         if not node:
             self.skipTest("node runtime is unavailable")
@@ -116,6 +116,8 @@ class WorkbenchClientContractTests(unittest.TestCase):
         env = {**os.environ, "WORKBENCH_FIXTURES": str(fixtures), "WORKBENCH_JS": str(_CLIENT_JS)}
         if stale_review:
             env["WORKBENCH_REVIEW_STALE"] = "1"
+        if legacy_dom:
+            env["WORKBENCH_LEGACY_DOM"] = "1"
         result = subprocess.run([node, str(_HARNESS)], capture_output=True, text=True, env=env, timeout=60)
         self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
         return result.stdout
@@ -138,6 +140,10 @@ class WorkbenchClientContractTests(unittest.TestCase):
     def test_stale_review_package_keeps_workspace_visible_in_read_only_mode(self) -> None:
         view = WorkbenchWorkspaceBuilder(self.root).build("gate5")
         self.assertIn("client contract OK", self._run_harness(view, stale_review=True))
+
+    def test_new_client_remains_compatible_with_pre_evidence_workspace_dom(self) -> None:
+        view = WorkbenchWorkspaceBuilder(self.root).build("gate5")
+        self.assertIn("client contract OK", self._run_harness(view, legacy_dom=True))
 
 
 if __name__ == "__main__":

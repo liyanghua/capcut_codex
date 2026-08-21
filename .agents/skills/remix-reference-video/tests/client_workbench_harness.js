@@ -20,6 +20,7 @@ const workspacePath = path.join(fixturesDir, "workspace2.json");
 const hasSecondWorkspace = fs.existsSync(workspacePath);
 const workspace2 = hasSecondWorkspace ? JSON.parse(fs.readFileSync(workspacePath, "utf-8")) : null;
 const staleReview = process.env.WORKBENCH_REVIEW_STALE === "1";
+const legacyDom = process.env.WORKBENCH_LEGACY_DOM === "1";
 
 const failures = [];
 const assert = (condition, message) => { if (!condition) failures.push(message); };
@@ -45,7 +46,7 @@ function elementFor(selector) {
 
 global.document = {
   body: { dataset: { runId: "harness-run" } },
-  querySelector: (selector) => elementFor(selector),
+  querySelector: (selector) => legacyDom && ["#material-evidence-card", "#material-evidence-editor"].includes(selector) ? null : elementFor(selector),
   querySelectorAll: () => [],
   addEventListener: () => {},
 };
