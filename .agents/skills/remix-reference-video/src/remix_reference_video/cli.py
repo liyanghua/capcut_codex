@@ -6,6 +6,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import sys
@@ -901,6 +902,22 @@ def _emit_error(message: str, *, json_output: bool, status: str = "invalid") -> 
         print(f"remixctl: {message}", file=sys.stderr)
 
 
+def _load_workspace_env(workspace_root: Path) -> None:
+    """Load local non-committed env values for child TTS processes."""
+    env_path = Path(workspace_root).resolve() / ".env"
+    if not env_path.is_file():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key and key.replace("_", "a").isalnum() and key not in os.environ:
+            os.environ[key] = value
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     json_output = bool(getattr(args, "json", False))
@@ -1033,6 +1050,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("workbench port is invalid")
             if json_output:
                 _emit({"status":"starting","url":f"http://{args.host}:{args.port}/"}, json_output=True, command=args.command)
+            _load_workspace_env(args.workspace_root)
             serve_workbench(args.workspace_root, actor=args.actor, role=args.role, host=args.host, port=args.port)
             return EXIT_OK
         raise ValueError(f"unsupported command: {args.command}")
