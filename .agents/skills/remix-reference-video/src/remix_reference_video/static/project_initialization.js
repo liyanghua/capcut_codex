@@ -128,6 +128,13 @@
     document.getElementById("project-status").textContent = ready ? "Stage 0 待确认" : "Stage 0 阻断";
   }
 
+  function setFrozenState(locked) {
+    const save = document.getElementById("save-draft");
+    const stage0 = document.getElementById("run-stage0");
+    if (save) save.disabled = locked;
+    if (stage0) stage0.disabled = locked;
+  }
+
   async function loadProject() {
     if (!state.projectId) return;
     const response = await fetch(`/api/v1/projects/${encodeURIComponent(state.projectId)}`, {credentials: "same-origin"});
@@ -136,6 +143,7 @@
     fillDraft(result.draft);
     if (result.stage0_report) showStage0(result.stage0_report);
     if (result.project_state?.lifecycle_status === "frozen_waiting_gate1") {
+      setFrozenState(true);
       document.getElementById("freeze-project").hidden = true;
       document.getElementById("start-cold").hidden = false;
       document.getElementById("project-status").textContent = "等待启动 Gate 1";
@@ -184,6 +192,7 @@
       try {
         await protectedApi(`/api/v1/projects/${encodeURIComponent(state.projectId)}/freeze`, {draft_revision: state.draft.draft_revision, report_sha256: state.report.report_sha256, request_id: requestId("freeze"), idempotency_key: requestId("freeze-key")});
         event.currentTarget.hidden = true;
+        setFrozenState(true);
         document.getElementById("start-cold").hidden = false;
         document.getElementById("project-status").textContent = "等待启动 Gate 1";
         message("冻结输入已生成，尚未启动生产运行。", "success");

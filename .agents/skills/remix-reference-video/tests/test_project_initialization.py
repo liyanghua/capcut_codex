@@ -249,6 +249,30 @@ class ProjectInitializationContractTests(unittest.TestCase):
         self.assertFalse((root.parent / "cold").exists())
         self.assertFalse((root.parent / "hot").exists())
 
+    def test_frozen_project_rejects_draft_edits_and_stage0_rerun(self) -> None:
+        store = ProjectInitializationStore(self.workspace)
+        draft = store.save_draft(
+            _draft(self.reference, self.assets), actor="local-operator", request_id="frozen-edit-draft", idempotency_key="frozen-edit-draft"
+        )
+        report = store.run_stage0(
+            str(draft["project_id"]), request_id="frozen-edit-stage0", idempotency_key="frozen-edit-stage0",
+            actor="local-operator", probe=lambda _path, media_type: {"media_type": media_type},
+        )
+        store.freeze(
+            str(draft["project_id"]), expected_draft_revision=1, expected_report_sha256=str(report["report_sha256"]),
+            actor="local-operator", request_id="frozen-edit-freeze", idempotency_key="frozen-edit-freeze", date="2026-08-20",
+        )
+        with self.assertRaisesRegex(ProjectInitializationConflict, "frozen"):
+            store.save_draft(
+                _draft(self.reference, self.assets), project_id=str(draft["project_id"]), expected_revision=1,
+                actor="local-operator", request_id="frozen-edit-save", idempotency_key="frozen-edit-save",
+            )
+        with self.assertRaisesRegex(ProjectInitializationConflict, "frozen"):
+            store.run_stage0(
+                str(draft["project_id"]), request_id="frozen-edit-rerun", idempotency_key="frozen-edit-rerun",
+                actor="local-operator", probe=lambda _path, media_type: {"media_type": media_type},
+            )
+
     def test_freeze_rejects_changed_source(self) -> None:
         store = ProjectInitializationStore(self.workspace)
         draft = store.save_draft(

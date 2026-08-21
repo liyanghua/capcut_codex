@@ -218,6 +218,11 @@ class ProjectInitializationStore:
             project_root = self.projects_root / identifier
             draft_path = project_root / "initialization_draft.json"
             existing = read_json_object(draft_path) if draft_path.is_file() else None
+            if existing is not None:
+                project_state_path = project_root / "project_state.json"
+                lifecycle = read_json_object(project_state_path).get("lifecycle_status") if project_state_path.is_file() else None
+                if lifecycle in {"frozen_waiting_gate1", "cold_running_or_awaiting_review"}:
+                    raise ProjectInitializationConflict("frozen project cannot be edited")
             revision = int(existing.get("draft_revision", 0)) if existing else 0
             if expected_revision is not None and expected_revision != revision:
                 raise ProjectInitializationConflict("draft revision conflict")
@@ -285,6 +290,10 @@ class ProjectInitializationStore:
                     raise ProjectInitializationConflict("idempotency key was used with different input")
                 return dict(replay["result"])
         project_root = self._project_root(project_id)
+        project_state_path = project_root / "project_state.json"
+        lifecycle = read_json_object(project_state_path).get("lifecycle_status") if project_state_path.is_file() else None
+        if lifecycle in {"frozen_waiting_gate1", "cold_running_or_awaiting_review"}:
+            raise ProjectInitializationConflict("frozen project cannot rerun Stage 0")
         staging = project_root / ".staging" / _normalize_text(request_id, "request_id")
         if staging.exists():
             shutil.rmtree(staging)
