@@ -74,39 +74,47 @@ def register_planning_adapters(
         domain_managed_outputs=True,
     ))
 
+    creative = False
+    snapshot = root / "g_b_frozen_input_snapshot.json"
+    if snapshot.is_file() and not snapshot.is_symlink():
+        creative = read_json_object(snapshot).get("creative_contract_version") == "creative_contract_v1"
+
     blueprint_output = root / "shot_blueprint.json"
     baseline_output = root / "content_baseline.json"
+    objective_output = root / "creative_objective.json"
+    blueprint_outputs = (blueprint_output, baseline_output, objective_output) if creative else (blueprint_output, baseline_output)
     registry.register(
         NativeStageAdapter(
             root,
             execution_stage_id="compile-blueprint",
-            implementation_version="blueprint-native-v1",
+            implementation_version="blueprint-native-v2" if creative else "blueprint-native-v1",
             required_inputs=(brief, recipe, precheck),
-            declared_outputs=(blueprint_output, baseline_output),
+            declared_outputs=blueprint_outputs,
             execute_fn=lambda payload: _compile_blueprint(
-                brief, recipe, precheck, payload
+                brief, recipe, precheck, payload, creative=creative,
+                gate1_selection_hash=_file_hash(root / "derived" / "gate1_decomposition_selection.json") if creative else None,
             ),
             require_stage_input=True,
         )
     )
 
     mutation_output = root / "mutation_plan.json"
+    strategy_output = root / "remix_strategy_candidates.json"
+    mutation_outputs = (mutation_output, strategy_output) if creative else (mutation_output,)
     registry.register(
         NativeStageAdapter(
             root,
             execution_stage_id="compile-mutation-plan",
-            implementation_version="mutation-native-v1",
-            required_inputs=(brief, baseline_output),
-            declared_outputs=(mutation_output,),
-            execute_fn=lambda payload: _compile_mutation(brief, baseline_output, payload),
+            implementation_version="mutation-native-v2" if creative else "mutation-native-v1",
+            required_inputs=(brief, baseline_output, precheck, objective_output) if creative else (brief, baseline_output),
+            declared_outputs=mutation_outputs,
+            execute_fn=lambda payload: _compile_mutation(
+                brief, baseline_output, precheck, objective_output, payload, creative=creative,
+            ),
             require_stage_input=True,
         )
     )
 
-    creative = False
-    snapshot = root / "g_b_frozen_input_snapshot.json"
-    if snapshot.is_file() and not snapshot.is_symlink():
-        creative = read_json_object(snapshot).get("creative_contract_version") == "creative_contract_v1"
     evidence_requirements = root / "material_evidence_requirements.json"
     evidence_annotations = root / "material_evidence_annotations.json"
     evidence_profiles = root / "derived" / "material_evidence_profiles.json"
@@ -190,25 +198,67 @@ def _build_material_evidence(
 
 
 def _compile_blueprint(
-    brief_path: Path, recipe_path: Path, precheck_path: Path, payload: Mapping[str, object]
+    brief_path: Path,
+    recipe_path: Path,
+    precheck_path: Path,
+    payload: Mapping[str, object],
+    *,
+    creative: bool = False,
+    gate1_selection_hash: str | None = None,
 ) -> dict[str, object]:
+    brief = read_json_object(brief_path)
     compiled = BlueprintAdapter().compile(
-        brief=read_json_object(brief_path),
+        brief=brief,
         recipe=read_json_object(recipe_path),
         coverage_precheck=read_json_object(precheck_path),
         target_fragments=_required_list(payload, "target_fragments"),
     )
+    if creative:
+        selected = payload.get("selected_decomposition_id")
+        if not isinstance(selected, str) or not selected:
+            raise ValueError("creative Blueprint requires selected decomposition")
+        if gate1_selection_hash is None:
+            raise ValueError("creative Blueprint requires Gate 1 selection hash")
+        compiled["creative_objective"] = BlueprintAdapter().build_creative_objective(
+            brief=brief,
+            selected_decomposition_id=selected,
+            gate1_selection_hash=gate1_selection_hash,
+        )
     return compiled
 
 
 def _compile_mutation(
-    brief_path: Path, baseline_path: Path, payload: Mapping[str, object]
+    brief_path: Path,
+    baseline_path: Path,
+    precheck_path: Path | None,
+    objective_path: Path | None,
+    payload: Mapping[str, object],
+    *,
+    creative: bool = False,
 ) -> Mapping[str, object]:
-    return ControlledMutationAdapter().compile(
+    adapter = ControlledMutationAdapter()
+    baseline = read_json_object(baseline_path)
+    mutation = adapter.compile(
         brief=read_json_object(brief_path),
-        content_baseline=read_json_object(baseline_path),
+        content_baseline=baseline,
         fallback_ids=_required_list(payload, "fallback_ids"),
     )
+    if not creative:
+        return mutation
+    if precheck_path is None or objective_path is None:
+        raise ValueError("creative Mutation requires objective and coverage precheck")
+    selected = payload.get("selected_decomposition_id")
+    if not isinstance(selected, str) or not selected:
+        raise ValueError("creative Mutation requires selected decomposition")
+    return {
+        "mutation_plan": mutation,
+        "remix_strategy_candidates": adapter.build_remix_strategy_candidates(
+            content_baseline=baseline,
+            coverage_precheck=read_json_object(precheck_path),
+            creative_objective=read_json_object(objective_path),
+            selected_decomposition_id=selected,
+        ),
+    }
 
 
 def _build_coverage(

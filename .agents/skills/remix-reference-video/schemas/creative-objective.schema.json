@@ -26,6 +26,7 @@
     "approved_claims": {"type": "array", "items": {"type": "string"}},
     "forbidden_claims": {"type": "array", "items": {"type": "string"}},
     "product_appearance_target_seconds": {"type": ["number", "null"], "minimum": 0},
+    "product_appearance_exception": {"type": ["string", "null"]},
     "cta": {"type": "string"},
     "objectives": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["objective_id", "weight", "required"], "properties": {"objective_id": {"type": "string", "minLength": 1}, "weight": {"type": "number", "minimum": 0, "maximum": 1}, "required": {"type": "boolean"}, "description": {"type": "string"}}, "additionalProperties": false}}
   },

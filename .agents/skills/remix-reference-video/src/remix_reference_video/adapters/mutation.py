@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -76,6 +77,86 @@ class ControlledMutationAdapter:
             "forbidden_claims": list(content_baseline.get("forbidden_claims", [])),
             "structural_requests": [],
         }
+
+    def build_remix_strategy_candidates(
+        self,
+        *,
+        content_baseline: Mapping[str, object],
+        coverage_precheck: Mapping[str, object],
+        creative_objective: Mapping[str, object],
+        selected_decomposition_id: str,
+    ) -> dict[str, Any]:
+        """Build bounded, comparable Gate 2 remix options from advisory coverage."""
+        if content_baseline.get("artifact_type") != "content_baseline":
+            raise MutationValidationError("content_baseline artifact is required")
+        if coverage_precheck.get("artifact_type") != "coverage_precheck" or coverage_precheck.get("scope") != "precheck":
+            raise MutationValidationError("coverage_precheck advisory artifact is required")
+        if creative_objective.get("artifact_type") != "creative_objective" or not isinstance(creative_objective.get("objective_id"), str):
+            raise MutationValidationError("creative_objective artifact is required")
+        if not isinstance(selected_decomposition_id, str) or not selected_decomposition_id:
+            raise MutationValidationError("selected decomposition is required")
+        fragments = content_baseline.get("fragments")
+        if not isinstance(fragments, list):
+            raise MutationValidationError("content baseline fragments are required")
+        fragment_ids = [str(row["fragment_id"]) for row in fragments if isinstance(row, Mapping) and isinstance(row.get("fragment_id"), str)]
+        coverage = coverage_precheck.get("coverage")
+        coverage_rows = coverage if isinstance(coverage, list) else []
+        viable = sum(1 for row in coverage_rows if isinstance(row, Mapping) and row.get("status") in {"likely", "covered", "available"})
+        denominator = len(coverage_rows) or len(fragment_ids)
+        estimate = round(viable / denominator, 6) if denominator else 0.0
+        missing = [
+            str(row.get("fragment_id"))
+            for row in coverage_rows
+            if isinstance(row, Mapping) and row.get("status") not in {"likely", "covered", "available"} and isinstance(row.get("fragment_id"), str)
+        ]
+        candidates = [
+            self._candidate("balanced_remix_v1", fragment_ids, missing, estimate, 0.25),
+            self._candidate("structure_fidelity_v1", fragment_ids, missing, estimate, 0.10),
+            self._candidate("asset_constrained_v1", fragment_ids, missing, estimate, 0.55 if missing else 0.20),
+        ]
+        return {
+            **_ENVELOPE,
+            "artifact_type": "remix_strategy_candidates",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:remix-strategy-candidates",
+            "implementation_version": "remix-strategy-builder-v1",
+            "lifecycle_status": "ready",
+            "input_hashes": {
+                "content_baseline.json": self._digest(content_baseline),
+                "coverage_precheck.json": self._digest(coverage_precheck),
+                "creative_objective.json": self._digest(creative_objective),
+            },
+            "objective_id": creative_objective["objective_id"],
+            "selected_decomposition_id": selected_decomposition_id,
+            "candidates": candidates,
+        }
+
+    @staticmethod
+    def _candidate(
+        strategy_id: str,
+        fragment_ids: list[str],
+        missing: list[str],
+        estimate: float,
+        deviation: float,
+    ) -> dict[str, object]:
+        available = [item for item in fragment_ids if item not in missing]
+        return {
+            "strategy_id": strategy_id,
+            "status": "passed",
+            "preserve": available,
+            "replace": missing,
+            "compress": missing if strategy_id == "asset_constrained_v1" else [],
+            "expand": [fragment_ids[0]] if fragment_ids and strategy_id == "conversion_adaptation_v1" else [],
+            "reorder": [],
+            "fallback": missing,
+            "coverage_estimate": estimate,
+            "feasibility_estimate": estimate,
+            "reference_deviation_estimate": deviation,
+        }
+
+    @staticmethod
+    def _digest(value: object) -> str:
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def build_gate2_package(
         self,

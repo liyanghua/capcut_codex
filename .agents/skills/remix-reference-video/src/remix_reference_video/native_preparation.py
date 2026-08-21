@@ -90,28 +90,31 @@ def _gate2_package(
         except (OSError, StorageError, ValueError, TypeError):
             creative = False
         if creative:
-            optional = (
+            required = (
                 "creative_objective.json",
                 "remix_strategy_candidates.json",
                 "coverage_precheck.json",
             )
-            for name in optional:
+            missing = [name for name in required if not (root / name).is_file() or (root / name).is_symlink()]
+            if missing:
+                raise ValueError("creative Gate 2 package requires: " + ", ".join(missing))
+            for name in required:
                 path = root / name
-                if path.is_file() and not path.is_symlink():
-                    package["input_hashes"][name] = _file_hash(path)
+                package["input_hashes"][name] = _file_hash(path)
             candidates_path = root / "remix_strategy_candidates.json"
-            if candidates_path.is_file() and not candidates_path.is_symlink():
-                candidates = read_json_object(candidates_path).get("candidates")
-                if isinstance(candidates, list):
-                    passed = next(
-                        (row for row in candidates if isinstance(row, Mapping) and row.get("status") == "passed"),
-                        None,
-                    )
-                    if isinstance(passed, Mapping) and isinstance(passed.get("strategy_id"), str):
-                        package["creative_bindings"] = {
-                            "selected_remix_strategy_id": passed["strategy_id"],
-                            "remix_strategy_candidates.json_sha256": package["input_hashes"].get("remix_strategy_candidates.json"),
-                        }
+            candidates = read_json_object(candidates_path).get("candidates")
+            if not isinstance(candidates, list):
+                raise ValueError("creative Gate 2 strategy candidates are required")
+            passed = next(
+                (row for row in candidates if isinstance(row, Mapping) and row.get("status") == "passed"),
+                None,
+            )
+            if not isinstance(passed, Mapping) or not isinstance(passed.get("strategy_id"), str):
+                raise ValueError("creative Gate 2 requires a passed remix strategy")
+            package["creative_bindings"] = {
+                "selected_remix_strategy_id": passed["strategy_id"],
+                "remix_strategy_candidates.json_sha256": package["input_hashes"]["remix_strategy_candidates.json"],
+            }
     return package
 
 

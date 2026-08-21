@@ -290,27 +290,27 @@
 - Test: `.agents/skills/remix-reference-video/tests/test_creative_objective.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_remix_strategies.py`
 
-- [ ] **Step 1: Write failing objective/strategy tests**
+- [x] **Step 1: Write failing objective/strategy tests**
 
   Assert `creative_objective.json` reads only the frozen Brief (`approved_claims[]`/`forbidden_claims[]`, audience, platform, target) and the Gate 1 decision; enforces normalized non-negative weights summing to `1.0`; supports `product_appearance_target_seconds` plus an explicit approved exception field; rejects identity-field overrides. Assert `remix_strategy_candidates.json` contains ≤3 candidates from the fixed strategy set with coverage/feasibility/deviation estimates computed from `coverage_precheck.json`.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because the producers do not emit these artifacts.
 
-- [ ] **Step 3: Implement Blueprint `creative_objective` production**
+- [x] **Step 3: Implement Blueprint `creative_objective` production**
 
   Generate after Gate 1 approval, before the Gate 2 package. Also emit per-fragment `visual_intent` into `content_baseline.json` (producer fixed here; downstream script lines and shot diagnostics consume it).
 
-- [ ] **Step 4: Implement Controlled Mutation remix candidates**
+- [x] **Step 4: Implement Controlled Mutation remix candidates**
 
   Generate the ≤3 strategy candidates with retain/replace/compress/expand/reorder/fallback sections and coverage-precheck-based estimates; the machine-proposed `selected_remix_strategy_id` defaults to `balanced_remix_v1`.
 
-- [ ] **Step 5: Bind the Gate 2 atomic package**
+- [x] **Step 5: Bind the Gate 2 atomic package**
 
   `lint-gate2-package` binds `creative_objective.json`, `remix_strategy_candidates.json`, `content_baseline.json`, `mutation_plan.json`, `coverage_precheck.json`, and `selected_remix_strategy_id`. Document the coverage-precheck binding as display-completeness: regenerating the precheck re-stales the Gate 2 package; approval authority remains the objective+baseline+mutation+strategy set.
 
-- [ ] **Step 6: Re-run focused tests**
+- [x] **Step 6: Re-run focused tests**
 
   Expected: PASS.
 

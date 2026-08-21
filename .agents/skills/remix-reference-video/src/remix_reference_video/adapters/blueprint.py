@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -73,6 +75,7 @@ class BlueprintAdapter:
                 raise BlueprintValidationError(
                     f"{fragment_id} uses forbidden claim: {', '.join(blocked)}"
                 )
+            row["visual_intent"] = self._visual_intent(row)
             used_claim_ids.update(claim_ids)
             narration += text
         envelope = self._duration_envelope(brief.get("duration_envelope"))
@@ -102,6 +105,115 @@ class BlueprintAdapter:
             "lifecycle_status": "draft",
         }
         return {"shot_blueprint": blueprint, "content_baseline": baseline}
+
+    def build_creative_objective(
+        self,
+        *,
+        brief: Mapping[str, object],
+        selected_decomposition_id: str,
+        gate1_selection_hash: str,
+    ) -> dict[str, Any]:
+        """Build a non-authoritative Gate 2 target from frozen facts only."""
+        if not isinstance(selected_decomposition_id, str) or not selected_decomposition_id:
+            raise BlueprintValidationError("selected decomposition is required")
+        if not self._sha256(gate1_selection_hash):
+            raise BlueprintValidationError("Gate 1 selection hash is invalid")
+        config = brief.get("creative_objective", {})
+        if config is None:
+            config = {}
+        if not isinstance(config, Mapping):
+            raise BlueprintValidationError("creative_objective must be an object")
+        if any(field in config for field in ("product", "platform", "audience", "target")):
+            raise BlueprintValidationError("creative objective cannot override frozen identity fields")
+        product = brief.get("product")
+        target = brief.get("target")
+        if not isinstance(product, Mapping) or not isinstance(target, Mapping):
+            raise BlueprintValidationError("frozen product and target identity are required")
+        product_name, audience, platform = product.get("name"), product.get("audience"), target.get("platform")
+        if not all(isinstance(value, str) and value for value in (product_name, audience, platform)):
+            raise BlueprintValidationError("frozen product, audience and platform are required")
+        approved = self._claims(brief.get("approved_claims"))
+        forbidden = self._strings(brief.get("forbidden_claims", ()), "forbidden_claims")
+        envelope = self._duration_envelope(brief.get("duration_envelope"))
+        appearance_target = config.get("product_appearance_target_seconds")
+        if appearance_target is not None and (
+            isinstance(appearance_target, bool) or not isinstance(appearance_target, (int, float)) or appearance_target < 0
+        ):
+            raise BlueprintValidationError("product appearance target is invalid")
+        exception = config.get("product_appearance_exception")
+        if exception is not None and (not isinstance(exception, str) or not exception):
+            raise BlueprintValidationError("product appearance exception is invalid")
+        objectives = self._creative_objectives(approved)
+        brief_hash = self._digest(brief)
+        objective_seed = f"{brief_hash}:{selected_decomposition_id}:{gate1_selection_hash}"
+        return {
+            **_ENVELOPE,
+            "artifact_type": "creative_objective",
+            "schema_id": "urn:capcut:remix-reference-video:artifact:creative-objective",
+            "implementation_version": "creative-objective-builder-v1",
+            "lifecycle_status": "ready",
+            "input_hashes": {
+                "project_brief.json": brief_hash,
+                "gate1_decomposition_selection": gate1_selection_hash,
+            },
+            "objective_id": hashlib.sha256(objective_seed.encode("utf-8")).hexdigest()[:16],
+            "objective_version": "creative_objective_v1",
+            "objective_contract_version": "creative_objective_v1",
+            "platform": platform,
+            "audience": audience,
+            "product": product_name,
+            "duration_envelope": {
+                "min_seconds": float(envelope["minimum_seconds"]),
+                "max_seconds": float(envelope["maximum_seconds"]),
+            },
+            "core_message": str(config.get("core_message", next(iter(approved.values()))["text"])),
+            "desired_action": str(config.get("desired_action", "not_specified")),
+            "opening_hook_hypothesis": str(config.get("opening_hook_hypothesis", "not_specified")),
+            "approved_claims": [row["text"] for row in approved.values()],
+            "forbidden_claims": forbidden,
+            "product_appearance_target_seconds": None if appearance_target is None else float(appearance_target),
+            "product_appearance_exception": exception,
+            "cta": str(config.get("cta", "not_required")),
+            "objectives": objectives,
+        }
+
+    @staticmethod
+    def _visual_intent(fragment: Mapping[str, object]) -> dict[str, object]:
+        raw_ids = fragment.get("reference_shot_ids")
+        if not isinstance(raw_ids, list):
+            raw_ids = [fragment["reference_shot_id"]] if isinstance(fragment.get("reference_shot_id"), str) else []
+        return {
+            "reference_shot_ids": [item for item in raw_ids if isinstance(item, str) and item],
+            "required_actions": list(fragment.get("required_actions", [])),
+            "claim_ids": list(fragment.get("claim_ids", [])),
+            "narrative_role": fragment.get("narrative_role"),
+        }
+
+    @staticmethod
+    def _creative_objectives(approved: Mapping[str, Mapping[str, object]]) -> list[dict[str, object]]:
+        base = [
+            {"objective_id": "opening_hook", "required": True, "description": "前三秒建立观看动机"},
+            {"objective_id": "product_appearance", "required": True, "description": "商品清晰出现"},
+            *[
+                {"objective_id": f"claim:{claim_id}", "required": True, "description": str(row["text"])}
+                for claim_id, row in approved.items()
+            ],
+            {"objective_id": "close", "required": True, "description": "自然收束"},
+        ]
+        weight = 1.0 / len(base)
+        for row in base:
+            row["weight"] = weight
+        base[-1]["weight"] = 1.0 - sum(float(row["weight"]) for row in base[:-1])
+        return base
+
+    @staticmethod
+    def _digest(value: object) -> str:
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _sha256(value: object) -> bool:
+        return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
     @staticmethod
     def _claims(value: object) -> dict[str, dict[str, object]]:
