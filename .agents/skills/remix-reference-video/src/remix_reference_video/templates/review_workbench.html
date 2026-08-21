@@ -69,6 +69,7 @@
         <section class="decision-card"><span class="eyebrow">现在要判断</span><h2 id="decision-question">正在读取</h2><p id="recommendation" class="recommendation"></p></section>
         <section class="decision-card"><h3>依据</h3><div id="evidence-list" class="evidence-list"></div></section>
         <section class="decision-card" id="stage-content-card" hidden><h3>阶段内容</h3><div id="stage-content"></div></section>
+        <section class="decision-card" id="key-artifacts-card" hidden><h3>关键产物</h3><div id="stage-key-artifacts"></div></section>
         <section class="decision-card" id="quality-card" hidden><h3>质量检查</h3><div id="quality-checks"></div></section>
         <section class="decision-card risks-card"><h3>风险与缺口</h3><div id="risks"></div></section>
         <section class="decision-card"><h3>下一步</h3><p id="next-action" class="next-action"></p></section>
@@ -78,6 +79,7 @@
     </aside>
   </main>
   <dialog id="change-dialog"><form id="change-form" method="dialog"><header><div><span class="eyebrow">结构化修改</span><h2>告诉系统怎么改</h2></div><button type="button" class="icon-button" data-close aria-label="关闭">关闭</button></header><label for="change-type">修改对象</label><select id="change-type"></select><label for="change-target">具体内容</label><select id="change-target"></select><label for="change-reason">业务原因</label><textarea id="change-reason" rows="3" required placeholder="例如：第 2 段素材未展示防水效果"></textarea><div id="impact-preview" class="impact-preview" hidden></div><footer><button type="button" data-preview>预览影响</button><button type="button" class="primary" data-confirm disabled>确认修改</button></footer></form></dialog>
+  <dialog id="artifact-dialog"><section class="artifact-drawer"><header><div><span class="eyebrow">关键产物详情</span><h2 id="artifact-dialog-title">产物</h2></div><button type="button" class="icon-button" data-artifact-close aria-label="关闭">关闭</button></header><div id="artifact-dialog-content"></div></section></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="/static/review_workbench.js" defer></script>
 </body>

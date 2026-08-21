@@ -175,6 +175,11 @@ class WorkbenchWorkspaceBuilder:
             stage_status = self._aggregate_stage_status(gate_rows)
             stages.append({"stage_id": f"stage{len(stages) + 1}", "business_label": business_label, "gate_ids": list(gates), "status": stage_status, "substeps": gate_rows})
         evidence = self._decision_evidence(gate_id, missing, recipe, baseline, mutation, matches, fragment_plan, evidence_matrix, preflight, reconstruction, final_validation, render_report)
+        stage_artifacts = self._stage_artifacts(state)
+        artifact_versions = self._artifact_versions()
+        lineage_edges = self._lineage_edges()
+        evaluation_summary = self._evaluation_summary()
+        change_impact = self._change_impact()
         if gate_status == "rejected":
             recommendation = "当前审核已驳回，请按修改范围重新生成审核包。"
         elif gate_status == "blocked":
@@ -206,6 +211,11 @@ class WorkbenchWorkspaceBuilder:
             "preview": self._preview(gate_id, recipe, media_allowlist),
             "timeline": timeline,
             "artifacts": self._artifacts(state),
+            "stage_artifacts": stage_artifacts,
+            "artifact_versions": artifact_versions,
+            "lineage_edges": lineage_edges,
+            "evaluation_summary": evaluation_summary,
+            "change_impact": change_impact,
             "quality_checks": self._quality_checks(final_validation, render_report),
             "process": {"current_stage": process_stage, "current_gate": gate_id, "stages": stages, "execution": self._execution()},
             "decision_context": {
@@ -617,6 +627,161 @@ class WorkbenchWorkspaceBuilder:
                 }
             )
         return rows
+
+    def _stage_artifacts(self, state: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """Present the registered artifacts as business outcomes, not file lists."""
+        registered = state.get("artifacts") if isinstance(state.get("artifacts"), Mapping) else {}
+        creative_artifacts = {
+            "decomposition_bundle.json", "creative_objective.json", "remix_strategy_candidates.json",
+            "script_candidates.json", "script_candidate_validation_report.json", "shot_quality_report.json",
+            "final_content_diagnostic_report.json", "enhancement_plan.json",
+        }
+        stage_rows: dict[str, list[dict[str, Any]]] = {label: [] for label, _ in _BUSINESS_STAGES}
+        for name, (stage, label) in _BUSINESS_ARTIFACTS.items():
+            record = registered.get(name)
+            digest = record.get("sha256") if isinstance(record, Mapping) and isinstance(record.get("sha256"), str) else None
+            exists = digest is not None or self._exists(name)
+            if exists:
+                artifact = self._optional_json(name) if name.endswith(".json") else None
+                media_ref = name if name.lower().endswith((*_IMAGE_EXT, *_VIDEO_EXT, *_AUDIO_EXT)) and self._exists(name) else None
+                stage_rows[stage].append(
+                    {
+                        "artifact_id": name,
+                        "business_label": label,
+                        "status": "available",
+                        "summary": self._business_artifact_summary(name, artifact),
+                        "thumbnail_ref": media_ref if self._media_type(media_ref) == "image" else None,
+                        "preview_ref": media_ref,
+                    }
+                )
+            elif name in creative_artifacts:
+                # A frozen historical run cannot be reverse-engineered into a creative candidate.
+                stage_rows[stage].append(
+                    {
+                        "artifact_id": name,
+                        "business_label": label,
+                        "status": "not_generated_legacy",
+                        "summary": "旧契约未生成",
+                        "thumbnail_ref": None,
+                        "preview_ref": None,
+                    }
+                )
+        return [
+            {"stage_id": f"stage{index}", "business_label": label, "artifacts": stage_rows[label]}
+            for index, (label, _) in enumerate(_BUSINESS_STAGES, start=1)
+        ]
+
+    @staticmethod
+    def _business_artifact_summary(name: str, artifact: Mapping[str, Any] | None) -> str:
+        if not isinstance(artifact, Mapping):
+            return "已生成"
+        if name == "creative_objective.json":
+            return str(artifact.get("north_star") or artifact.get("summary") or "已生成创作目标")
+        candidates = artifact.get("candidates")
+        if isinstance(candidates, list):
+            return f"已生成 {len(candidates)} 个候选"
+        fragments = artifact.get("fragments")
+        if isinstance(fragments, list):
+            return f"覆盖 {len(fragments)} 个片段"
+        status = artifact.get("status") or artifact.get("lifecycle_status") or artifact.get("preflight_status")
+        return str(status) if isinstance(status, str) and status else "已生成"
+
+    def _artifact_versions(self) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for name, selected_keys, validation_name in (
+            ("decomposition_bundle.json", ("selected_decomposition_id",), None),
+            ("remix_strategy_candidates.json", ("selected_strategy_candidate_id", "selected_candidate_id"), None),
+            ("script_candidates.json", ("selected_script_candidate_id", "selected_candidate_id"), "script_candidate_validation_report.json"),
+        ):
+            artifact = self._optional_json(name)
+            candidates = artifact.get("candidates") if isinstance(artifact, Mapping) else None
+            if not isinstance(candidates, list):
+                continue
+            selected = next((artifact.get(key) for key in selected_keys if isinstance(artifact.get(key), str)), None)
+            validation = self._optional_json(validation_name) if validation_name else None
+            validation_by_id = {
+                str(row.get("script_candidate_id")): str(row.get("status"))
+                for row in (validation or {}).get("candidates", [])
+                if isinstance(row, Mapping) and row.get("script_candidate_id") is not None
+            }
+            versions = []
+            for index, candidate in enumerate(candidates):
+                if not isinstance(candidate, Mapping):
+                    continue
+                candidate_id = str(
+                    candidate.get("script_candidate_id") or candidate.get("strategy_candidate_id")
+                    or candidate.get("decomposition_id") or candidate.get("candidate_id") or index + 1
+                )
+                versions.append(
+                    {
+                        "version_id": candidate_id,
+                        "strategy_id": candidate.get("strategy_id"),
+                        "summary": str(candidate.get("summary") or candidate.get("creative_hypothesis") or candidate.get("hypothesis") or "候选版本"),
+                        "diff_summary": str(candidate.get("diff_summary") or candidate.get("difference_summary") or "未提供差异摘要"),
+                        "status": validation_by_id.get(candidate_id, str(candidate.get("status") or "candidate")),
+                        "selected": candidate_id == selected,
+                    }
+                )
+            rows.append({"artifact_id": name, "candidate_versions": versions})
+        return rows
+
+    def _lineage_edges(self) -> list[dict[str, str]]:
+        candidates = (
+            ("creative_objective.json", "remix_strategy_candidates.json", "目标驱动复刻策略"),
+            ("remix_strategy_candidates.json", "production_script_candidate.json", "策略约束生产文案"),
+            ("script_candidates.json", "production_script_candidate.json", "候选物化为生产文案"),
+            ("production_script_candidate.json", "shot_blueprint.json", "文案服务分镜"),
+            ("shot_blueprint.json", "fragment_plan.json", "分镜选择生产素材"),
+            ("fragment_plan.json", "material_manifest.json", "已选素材物化"),
+            ("material_manifest.json", "reconstruction_timeline.json", "素材进入真实时间线"),
+            ("reconstruction_timeline.json", "remix.mp4", "时间线渲染成片"),
+        )
+        return [
+            {"from_artifact_id": source, "to_artifact_id": target, "business_label": label}
+            for source, target, label in candidates
+            if self._exists(source) and self._exists(target)
+        ]
+
+    def _evaluation_summary(self) -> dict[str, Any]:
+        definitions = (
+            ("参考拆解", "Gate 1 首轮结构通过率", "关键镜头漏检率、边界修订量、策略低置信度率", "decomposition_bundle.json"),
+            ("复刻方案", "加权创作目标覆盖率", "素材可实现率、证据可实现率、参考结构偏差", "creative_objective.json"),
+            ("素材与证据", "分镜意图完成率", "缺素材率、动作完整率、重复率、一致性缺陷", "fragment_plan.json"),
+            ("文案与声音", "脚本首轮业务通过率", "证据闭环率、连贯性、前三秒、预算超限率", "approved_production_script.json"),
+            ("成片终审", "L1 内容质量合格率", "L0 100% 通过、前三秒、高光、连贯性、一致性", "final_validation_report.json"),
+        )
+        return {
+            "stages": [
+                {
+                    "business_label": label,
+                    "north_star": north_star,
+                    "constraint_metrics": constraints,
+                    "evidence_source": source if self._exists(source) else None,
+                    "measurement_status": "not_measured",
+                    "not_measured_reason": "尚无满足当前计量口径的可比实测样本",
+                }
+                for label, north_star, constraints, source in definitions
+            ]
+        }
+
+    @staticmethod
+    def _change_impact() -> list[dict[str, Any]]:
+        # The workbench presents the same static impact contract as ChangeService;
+        # per-request estimates remain owned by its preview endpoint.
+        from .change_service import _IMPACTS
+
+        return [
+            {
+                "change_type": change_type,
+                "earliest_affected_gate": impact.get("earliest_affected_gate"),
+                "stale_artifacts": list(impact.get("artifacts_to_regenerate", [])),
+                "requires_tts": bool(impact.get("requires_tts", False)),
+                "requires_render": bool(impact.get("requires_render", False)),
+                "business_explanation": str(impact.get("business_explanation", "请先预览本次修改影响。")),
+            }
+            for change_type, impact in sorted(_IMPACTS.items())
+            if impact
+        ]
 
     def _quality_checks(self, final_validation: Mapping[str, Any] | None, render_report: Mapping[str, Any] | None) -> list[dict[str, Any]]:
         narrative = self._optional_json("narrative_coherence_report.json")

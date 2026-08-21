@@ -270,6 +270,52 @@
     $("#stage-content-card").hidden = parts.length === 0;
   }
 
+  function currentStageArtifacts() {
+    const label = state.workspace?.summary?.business_stage;
+    return (state.workspace?.stage_artifacts || []).find((row) => row.business_label === label)?.artifacts || [];
+  }
+
+  function renderKeyArtifacts() {
+    const artifacts = currentStageArtifacts();
+    $("#key-artifacts-card").hidden = artifacts.length === 0;
+    $("#stage-key-artifacts").innerHTML = artifacts.map((artifact) => {
+      const status = artifact.status === "not_generated_legacy" ? "旧契约未生成" : artifact.summary;
+      return `<button type="button" class="key-artifact-row ${artifact.status}" data-artifact-id="${esc(artifact.artifact_id)}"><span>${esc(artifact.business_label)}</span><small>${esc(status)}</small></button>`;
+    }).join("");
+    document.querySelectorAll("[data-artifact-id]").forEach((button) => button.addEventListener("click", () => openArtifactDrawer(button.dataset.artifactId)));
+  }
+
+  function openArtifactDrawer(artifactId) {
+    const artifact = currentStageArtifacts().find((row) => row.artifact_id === artifactId);
+    if (!artifact) return;
+    $("#artifact-dialog-title").textContent = artifact.business_label;
+    const versions = (state.workspace.artifact_versions || []).find((row) => row.artifact_id === artifactId)?.candidate_versions || [];
+    const edges = (state.workspace.lineage_edges || []).filter((row) => row.from_artifact_id === artifactId || row.to_artifact_id === artifactId);
+    const legacy = artifact.status === "not_generated_legacy";
+    const candidateRows = versions.map((version) => {
+      const select = artifactId === "script_candidates.json" && version.status === "passed" && !state.readOnly
+        ? `<button type="button" class="text-button" data-select-script-candidate="${esc(version.version_id)}">采用此候选</button>` : "";
+      return `<article class="artifact-version ${version.selected ? "selected" : ""}"><strong>${esc(version.summary)}</strong><span>${esc(version.strategy_id || "候选版本")}</span><p>${esc(version.diff_summary)}</p><small>${esc(version.status)}${version.selected ? " · 当前选择" : ""}</small>${select}</article>`;
+    }).join("");
+    const lineage = edges.map((edge) => `<li>${esc(edge.business_label)}</li>`).join("");
+    $("#artifact-dialog-content").innerHTML = legacy
+      ? `<p class="empty-rail">旧契约未生成此产物，不能从现有事实反推或补造候选。</p>`
+      : `<p>${esc(artifact.summary)}</p>${candidateRows ? `<div class="artifact-versions">${candidateRows}</div>` : ""}${lineage ? `<h3>上下游关系</h3><ul class="artifact-lineage">${lineage}</ul>` : ""}`;
+    document.querySelectorAll("[data-select-script-candidate]").forEach((button) => button.addEventListener("click", () => openScriptCandidateChange(button.dataset.selectScriptCandidate)));
+    $("#artifact-dialog").showModal();
+  }
+
+  function openScriptCandidateChange(candidateId) {
+    const choices = state.review?.impact_context?.change_options?.script_candidates || [];
+    const candidate = choices.find((row) => row.script_candidate_id === candidateId);
+    if (!candidate) { toast("当前审核包未提供可切换的脚本候选"); return; }
+    $("#artifact-dialog").close();
+    openChangeDialog();
+    $("#change-type").value = "script_candidate_select";
+    renderChangeTargets();
+    $("#change-target").value = candidateId;
+  }
+
   function renderQualityChecks() {
     const gate = state.workspace.current_gate;
     const checks = (state.workspace.quality_checks || []).filter((row) => (row.gate_scope || []).includes(gate));
@@ -328,6 +374,7 @@
     $("#risks").innerHTML = risks.map((risk) => `<div class="risk-row ${risk.blocking ? "blocking" : ""}">${esc(risk)}</div>`).join("") || `<div class="empty-rail">当前未发现阻塞</div>`;
     renderStepper();
     renderStageContent();
+    renderKeyArtifacts();
     renderQualityChecks();
     renderMaterialEvidence();
     const decisionReady = !state.readOnly && Boolean(state.review) && Boolean(state.session);
@@ -335,7 +382,7 @@
     document.querySelector('[data-action="request_changes"]').disabled = !decisionReady;
     document.querySelector('[data-action="reject"]').disabled = !decisionReady;
     $("#decision-note").disabled = !decisionReady;
-    $("#diagnostics-body").textContent = JSON.stringify({ run_id: view.run_id, state_revision: view.state_revision, package_revision: view.package_revision, current_gate: view.current_gate, preview_mode: view.preview?.mode, execution: view.process?.execution || [], artifacts: view.artifacts || [] }, null, 2);
+    $("#diagnostics-body").textContent = JSON.stringify({ run_id: view.run_id, state_revision: view.state_revision, package_revision: view.package_revision, current_gate: view.current_gate, preview_mode: view.preview?.mode, execution: view.process?.execution || [], artifacts: view.artifacts || [], lineage_edges: view.lineage_edges || [], change_impact: view.change_impact || [] }, null, 2);
   }
 
   function openSession() { return api("/review-session", { method: "POST", body: JSON.stringify({ gate_id: state.workspace.current_gate }) }).then((session) => { state.session = session; }); }
@@ -546,6 +593,7 @@
   $("#detail-close").addEventListener("click", () => { $("#object-detail").hidden = true; state.selected = null; renderRail(); });
   document.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", () => decide(button.dataset.action)));
   $("[data-close]").addEventListener("click", () => $("#change-dialog").close());
+  $("[data-artifact-close]").addEventListener("click", () => $("#artifact-dialog").close());
   $("[data-preview]").addEventListener("click", previewChange);
   $("[data-confirm]").addEventListener("click", confirmChange);
   $("#change-type").addEventListener("change", renderChangeTargets);

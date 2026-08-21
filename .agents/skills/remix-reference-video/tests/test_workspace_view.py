@@ -70,6 +70,72 @@ class WorkspaceViewTests(unittest.TestCase):
         self.assertEqual(view["storyboard"]["elements"], [])
         self.assertIn("待确认", view["decision_context"]["recommendation"])
 
+    def test_creative_key_artifact_projection_uses_only_real_artifacts(self) -> None:
+        self.write(
+            "creative_objective.json",
+            {
+                "objective_id": "objective-1",
+                "north_star": "目标覆盖",
+                "constraints": ["不新增产品事实"],
+                "evidence_source": "content_baseline.json",
+            },
+        )
+        self.write(
+            "remix_strategy_candidates.json",
+            {
+                "candidates": [
+                    {
+                        "strategy_candidate_id": "strategy-1",
+                        "strategy_id": "hybrid_commerce_v1",
+                        "summary": "先展示使用场景",
+                        "diff_summary": "结构优先于节奏",
+                    }
+                ],
+                "selected_strategy_candidate_id": "strategy-1",
+            },
+        )
+        self.write(
+            "script_candidates.json",
+            {
+                "candidates": [
+                    {
+                        "script_candidate_id": "script-1",
+                        "creative_hypothesis": "场景开场后引出卖点",
+                        "summary": "句式更连贯",
+                    }
+                ]
+            },
+        )
+        self.write(
+            "script_candidate_validation_report.json",
+            {"candidates": [{"script_candidate_id": "script-1", "status": "passed"}]},
+        )
+
+        view = self.builder.build("gate4_pre_generation")
+
+        self.assertEqual([row["business_label"] for row in view["stage_artifacts"]], ["参考拆解", "复刻方案", "素材与证据", "文案与声音", "成片终审"])
+        strategy_versions = [row for row in view["artifact_versions"] if row["artifact_id"] == "remix_strategy_candidates.json"]
+        self.assertEqual(strategy_versions[0]["candidate_versions"][0]["strategy_id"], "hybrid_commerce_v1")
+        self.assertEqual(strategy_versions[0]["candidate_versions"][0]["diff_summary"], "结构优先于节奏")
+        self.assertIn(
+            {"from_artifact_id": "creative_objective.json", "to_artifact_id": "remix_strategy_candidates.json"},
+            [{"from_artifact_id": row["from_artifact_id"], "to_artifact_id": row["to_artifact_id"]} for row in view["lineage_edges"]],
+        )
+        self.assertEqual(view["evaluation_summary"]["stages"][1]["measurement_status"], "not_measured")
+        self.assertEqual(view["evaluation_summary"]["stages"][1]["evidence_source"], "creative_objective.json")
+        script_impact = next(row for row in view["change_impact"] if row["change_type"] == "script_candidate_select")
+        self.assertEqual(script_impact["earliest_affected_gate"], "gate4_pre_generation")
+        self.assertTrue(script_impact["requires_tts"])
+
+    def test_historical_task_marks_absent_creative_artifacts_as_not_generated(self) -> None:
+        view = self.builder.build("gate2")
+
+        remix_stage = next(row for row in view["stage_artifacts"] if row["business_label"] == "复刻方案")
+        objective = next(row for row in remix_stage["artifacts"] if row["artifact_id"] == "creative_objective.json")
+        self.assertEqual(objective["status"], "not_generated_legacy")
+        self.assertEqual(objective["summary"], "旧契约未生成")
+        self.assertFalse(any(row["artifact_id"] == "remix_strategy_candidates.json" for row in view["artifact_versions"]))
+
     def test_material_evidence_pause_projects_requirements_without_gate_controls(self) -> None:
         self.store.update_state(
             lambda state: state

@@ -22,6 +22,12 @@ class WorkbenchClientContractTests(unittest.TestCase):
     def test_client_never_uses_full_page_reload(self) -> None:
         self.assertNotIn("location.reload", _CLIENT_JS.read_text(encoding="utf-8"))
 
+    def test_client_has_business_key_artifact_drawer_and_candidate_switch_entry(self) -> None:
+        source = _CLIENT_JS.read_text(encoding="utf-8")
+        self.assertIn("renderKeyArtifacts", source)
+        self.assertIn("openArtifactDrawer", source)
+        self.assertIn("openScriptCandidateChange", source)
+
     def test_project_initialization_picker_and_draft_handlers_execute(self) -> None:
         node = shutil.which("node")
         if not node:
