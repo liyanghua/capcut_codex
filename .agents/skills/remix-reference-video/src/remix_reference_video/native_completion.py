@@ -80,6 +80,7 @@ def register_completion_adapters(
     script_candidate = root / "production_script_candidate.json"
     script_candidates = root / "script_candidates.json"
     script_candidate_validation = root / "script_candidate_validation_report.json"
+    creative_objective = root / "creative_objective.json"
     baseline_contract = None
     if baseline.is_file() and not baseline.is_symlink():
         try:
@@ -136,14 +137,16 @@ def register_completion_adapters(
         registry.register(NativeStageAdapter(
             root, execution_stage_id="generate-script-candidates",
             implementation_version="script-candidates-native-v1",
-            required_inputs=(evidence, narrative_report), declared_outputs=(script_candidates,),
-            execute_fn=lambda: _generate_script_candidates(evidence, narrative_report),
+            required_inputs=(evidence, narrative_report, baseline, creative_objective, fragment_plan), declared_outputs=(script_candidates,),
+            execute_fn=lambda: _generate_script_candidates(
+                evidence, narrative_report, baseline, creative_objective, fragment_plan
+            ),
         ))
         registry.register(NativeStageAdapter(
             root, execution_stage_id="validate-script-candidates",
             implementation_version="script-candidates-validation-native-v1",
-            required_inputs=(script_candidates,), declared_outputs=(script_candidate_validation,),
-            execute_fn=lambda: _validate_script_candidates(script_candidates),
+            required_inputs=(script_candidates, creative_objective), declared_outputs=(script_candidate_validation,),
+            execute_fn=lambda: _validate_script_candidates(script_candidates, creative_objective),
         ))
         registry.register(NativeStageAdapter(
             root, execution_stage_id="select-script-candidate",
@@ -226,6 +229,7 @@ def register_completion_adapters(
         implementation_version="shot-quality-native-v1",
         required_inputs=(timeline, material, proxy_report), declared_outputs=(root / "shot_quality_report.json",),
         execute_fn=lambda: _validate_shot_quality(root, timeline, material, proxy_report),
+        domain_managed_outputs=True,
     ))
     registry.register(NativeStageAdapter(
         root, execution_stage_id="validate-proxy-boundaries",
@@ -245,19 +249,19 @@ def register_completion_adapters(
         domain_managed_outputs=True,
     ))
     gate5 = root / "gate_review_packages" / "gate5.json"
+    diagnostic = root / "final_content_diagnostic_report.json"
     registry.register(NativeStageAdapter(
         root, execution_stage_id="build-final-content-diagnostic",
         implementation_version="final-diagnostic-native-v1",
-        required_inputs=(root / "shot_quality_report.json",), declared_outputs=(root / "final_content_diagnostic_report.json",),
-        execute_fn=lambda: _build_final_diagnostic(root / "shot_quality_report.json"),
+        required_inputs=(root / "shot_quality_report.json", creative_objective), declared_outputs=(diagnostic,),
+        execute_fn=lambda: _build_final_diagnostic(root / "shot_quality_report.json", creative_objective, diagnostic),
+        domain_managed_outputs=True,
     ))
     registry.register(NativeStageAdapter(
         root, execution_stage_id="build-gate5-package",
         implementation_version="gate5-native-v1",
-        required_inputs=final_outputs, declared_outputs=(gate5,),
-        execute_fn=lambda: RenderAdapter(
-            TaskStorage(root), renderer=final_renderer, media_probe=media_probe
-        ).build_gate5_package(created_at=_now(), state_override=_state(root)),
+        required_inputs=(*final_outputs, diagnostic) if _creative_run(root) else final_outputs, declared_outputs=(gate5,),
+        execute_fn=lambda: _build_gate5_package(root, final_renderer, media_probe, diagnostic),
     ))
     destination = Path(archive_root or root / "final") / "remix.mp4"
     registry.register(NativeStageAdapter(
@@ -356,6 +360,20 @@ def _evidence_package(root: Path, baseline: Path, plan: Path, output: Path, payl
 
 
 def _compile_script(root: Path, baseline: Path, mutation: Path, evidence: Path, narrative: Path) -> Mapping[str, object]:
+    if _creative_run(root):
+        selected = root / "production_script_candidate.json"
+        validation = root / "script_candidate_validation_report.json"
+        selected_id = _selected_script_candidate(root, selected)
+        if selected_id is None or not validation.is_file():
+            raise ValueError("creative script candidate selection is required")
+        passed = {
+            str(row.get("script_candidate_id"))
+            for row in read_json_object(validation).get("candidates", [])
+            if isinstance(row, Mapping) and row.get("status") == "passed"
+        }
+        if selected_id not in passed:
+            raise ValueError("selected creative script candidate is not passed")
+        return read_json_object(selected)
     source = read_json_object(baseline)
     legacy_task = source.get("narrative_contract_version") != NARRATIVE_CONTRACT_VERSION
     return ProductionScriptCompiler().compile(
@@ -570,40 +588,135 @@ def _gate4_post_package(
     )
 
 
-def _generate_script_candidates(evidence: Path, narrative: Path) -> Mapping[str, object]:
+def _generate_script_candidates(
+    evidence: Path,
+    narrative: Path,
+    baseline: Path,
+    objective: Path,
+    fragment_plan: Path,
+) -> Mapping[str, object]:
     evidence_value = read_json_object(evidence)
     narrative_value = read_json_object(narrative)
+    baseline_value = read_json_object(baseline)
+    plan_value = read_json_object(fragment_plan)
+    baseline_rows = {
+        str(row.get("fragment_id")): row
+        for row in baseline_value.get("fragments", [])
+        if isinstance(row, Mapping) and isinstance(row.get("fragment_id"), str)
+    }
+    plans = {
+        str(row.get("fragment_id")): row
+        for row in plan_value.get("fragments", [])
+        if isinstance(row, Mapping) and isinstance(row.get("fragment_id"), str)
+    }
     fragments = []
     for row in evidence_value.get("rows", []):
         if isinstance(row, Mapping):
             narrative_row = next((item for item in narrative_value.get("fragments", []) if isinstance(item, Mapping) and item.get("fragment_id") == row.get("fragment_id")), {})
-            fragments.append({**dict(row), **dict(narrative_row)})
-    return ScriptCandidateGenerator(provider="stub", seed=0).generate({"evidence": {"fragments": fragments}})
+            fragment_id = str(row.get("fragment_id"))
+            source = baseline_rows.get(fragment_id, {})
+            plan = plans.get(fragment_id, {})
+            broad = plan.get("approved_broad_range")
+            budget = (
+                float(broad["end_seconds"]) - float(broad["start_seconds"])
+                if isinstance(broad, Mapping)
+                and isinstance(broad.get("start_seconds"), (int, float))
+                and isinstance(broad.get("end_seconds"), (int, float))
+                else None
+            )
+            fragments.append({
+                **dict(source), **dict(row), **dict(narrative_row),
+                "evidence_row_ref": str(row.get("evidence_row_ref") or f"evidence:{fragment_id}"),
+                "visual_duration_budget_seconds": budget,
+            })
+    return ScriptCandidateGenerator(provider="stub", seed=0).generate({
+        "objective": read_json_object(objective),
+        "evidence": {"fragments": fragments},
+    })
 
 
-def _validate_script_candidates(path: Path) -> Mapping[str, object]:
+def _validate_script_candidates(path: Path, objective: Path) -> Mapping[str, object]:
     value = read_json_object(path)
-    return ScriptCandidateValidator().validate(value, {})
+    return ScriptCandidateValidator().validate(value, {"objective": read_json_object(objective)})
 
 
 def _select_script_candidate(candidates_path: Path, validation_path: Path) -> Mapping[str, object]:
-    candidates = read_json_object(candidates_path).get("candidates", [])
-    validation = read_json_object(validation_path).get("candidates", [])
-    passed = {str(row.get("script_candidate_id")) for row in validation if isinstance(row, Mapping) and row.get("status") == "passed"}
-    selected = next((row for row in candidates if isinstance(row, Mapping) and row.get("script_candidate_id") in passed), None)
-    if not isinstance(selected, Mapping):
-        raise ValueError("no passed script candidate")
-    return {"artifact_type": "production_script_candidate", "schema_id": "urn:capcut:remix-reference-video:artifact:production-script-candidate", "schema_version": "1.0.0", "contract_version": "2.0.0-alpha.1", "skill_version": "2.0.0-alpha.1", "lifecycle_status": "awaiting_user", "selected_script_candidate_id": selected["script_candidate_id"], "lines": list(selected.get("lines", []))}
+    candidates = read_json_object(candidates_path)
+    validation = read_json_object(validation_path)
+    selected = ScriptCandidateValidator().select(candidates, validation)
+    lines = []
+    for row in selected.get("lines", []):
+        if not isinstance(row, Mapping):
+            raise ValueError("selected script line is invalid")
+        lines.append({**dict(row), "line_id": row["script_line_id"]})
+    return {
+        "artifact_type": "production_script_candidate",
+        "schema_id": "urn:capcut:remix-reference-video:artifact:production-script-candidate",
+        "schema_version": "1.0.0",
+        "contract_version": "2.0.0-alpha.1",
+        "skill_version": "2.0.0-alpha.1",
+        "lifecycle_status": "awaiting_user",
+        "selected_script_candidate_id": selected["script_candidate_id"],
+        "selection_policy_version": "script_candidate_rank_v1",
+        "input_hashes": {
+            "script_candidates.json": _sha256(candidates_path),
+            "script_candidate_validation_report.json": _sha256(validation_path),
+        },
+        "lines": lines,
+    }
 
 
 def _validate_shot_quality(root: Path, timeline: Path, material: Path, proxy: Path) -> Mapping[str, object]:
     report = ShotQualityAdapter().build(script=read_json_object(root / "production_script_candidate.json"), timeline=read_json_object(timeline), material=read_json_object(material), proxy=read_json_object(proxy))
     atomic_write_json(root / "shot_quality_report.json", report)
-    return report
+    if report["status"] != "blocked":
+        return {"status": "succeeded", "shot_quality_status": report["status"]}
+    blocked = [str(row.get("shot_id")) for row in report.get("shots", []) if isinstance(row, Mapping) and row.get("status") == "blocked"]
+    return {
+        "status": "recoverable_pause",
+        "active_stage": "validate-shot-quality",
+        "blocker": {
+            "category": "shot_quality_blocked", "requires_user": True,
+            "detail": "分镜存在缺失动作、素材或时间线问题，不能进入正式渲染。",
+            "shot_ids": blocked,
+        },
+        "next_actions": ["request_change:gate3_material_selection", "request_change:gate4_pre_generation"],
+    }
 
 
-def _build_final_diagnostic(shot_quality: Path) -> Mapping[str, object]:
-    return FinalContentDiagnosticAdapter().build(shot_quality=read_json_object(shot_quality), objective={"objectives": []})
+def _build_final_diagnostic(shot_quality: Path, objective: Path, output: Path) -> Mapping[str, object]:
+    report = FinalContentDiagnosticAdapter().build(
+        shot_quality=read_json_object(shot_quality), objective=read_json_object(objective)
+    )
+    atomic_write_json(output, report)
+    if report["status"] != "blocked":
+        return {"status": "succeeded", "final_diagnostic_status": report["status"]}
+    return {
+        "status": "recoverable_pause",
+        "active_stage": "build-final-content-diagnostic",
+        "blocker": {
+            "category": "final_content_diagnostic_blocked", "requires_user": True,
+            "detail": "成片未满足已批准的必达目标，不能进入 Gate 5 审核。",
+            "blocked_check_ids": report.get("blocked_check_ids", []),
+        },
+        "next_actions": ["request_change:gate4_pre_generation", "request_change:gate3_material_selection"],
+    }
+
+
+def _build_gate5_package(
+    root: Path,
+    renderer: Callable[..., Mapping[str, object]],
+    probe: Callable[[Path], Mapping[str, object]],
+    diagnostic: Path,
+) -> Mapping[str, object]:
+    package = RenderAdapter(TaskStorage(root), renderer=renderer, media_probe=probe).build_gate5_package(
+        created_at=_now(), state_override=_state(root)
+    )
+    if _creative_run(root):
+        if not diagnostic.is_file() or diagnostic.is_symlink():
+            raise ValueError("creative Gate 5 requires final content diagnostic")
+        return {**package, "input_hashes": {**dict(package["input_hashes"]), diagnostic.name: _sha256(diagnostic)}}
+    return package
 
 
 def _render_proxy(root: Path, timeline: Path, renderer: Callable[..., Mapping[str, object]]) -> Mapping[str, object]:

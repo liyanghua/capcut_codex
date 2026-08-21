@@ -29,20 +29,26 @@ class ShotQualityAdapter:
                 status = str(row.get("status", "blocked"))
                 if status not in {"passed", "manual_review", "blocked", "not_measured"}:
                     status = "blocked"
-                if status == "blocked":
-                    reasons.append("required_action_missing")
+                if status != "passed" or not isinstance(row.get("evidence_ref"), str) or not row.get("evidence_ref"):
+                    reasons.append("required_action_not_verified")
                 actions.append({"action_id": str(action_id), "status": status, "evidence_ref": row.get("evidence_ref")})
             timeline_row = timeline_rows.get(fragment_id, {})
-            if not isinstance(timeline_row.get("timeline_start_seconds"), (int, float)) or not isinstance(timeline_row.get("timeline_end_seconds"), (int, float)):
-                reasons.append("timeline_missing")
+            start, end = timeline_row.get("timeline_start_seconds"), timeline_row.get("timeline_end_seconds")
+            if (isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, (int, float))
+                    or not isinstance(end, (int, float)) or float(end) <= float(start)):
+                reasons.append("timeline_invalid")
             if fragment_id not in material_rows:
                 reasons.append("material_missing")
             continuity = str(shot.get("continuity", "not_measured"))
             if continuity not in {"passed", "blocked", "manual_review", "not_measured"}:
                 continuity = "manual_review"
             status = "blocked" if reasons else ("manual_review" if continuity == "manual_review" else "passed")
-            recovery = "gate3_material_selection" if any(reason in {"required_action_missing", "material_missing"} for reason in reasons) else ("gate4_pre_generation" if "timeline_missing" in reasons else None)
-            shots.append({"shot_id": fragment_id, "status": status, "action_results": actions, "first_three_seconds": False, "script_visual_coherence": "passed" if not reasons else "blocked", "consistency": continuity, "highlight_candidate": bool(shot.get("highlight_candidate", False)), "earliest_recovery_gate": recovery})
+            recovery = "gate3_material_selection" if any(reason in {"required_action_not_verified", "material_missing"} for reason in reasons) else ("gate4_pre_generation" if "timeline_invalid" in reasons else None)
+            objective_ids = []
+            if isinstance(line.get("objective_id"), str) and line.get("objective_id"):
+                objective_ids.append(str(line["objective_id"]))
+            objective_ids.extend(f"claim:{claim_id}" for claim_id in line.get("claim_ids", []) if isinstance(claim_id, str) and claim_id)
+            shots.append({"shot_id": fragment_id, "status": status, "objective_ids": sorted(set(objective_ids)), "action_results": actions, "first_three_seconds": isinstance(start, (int, float)) and not isinstance(start, bool) and float(start) < 3.0, "script_visual_coherence": "passed" if not reasons else "blocked", "consistency": continuity, "highlight_candidate": bool(shot.get("highlight_candidate", False)), "earliest_recovery_gate": recovery})
         statuses = {str(row["status"]) for row in shots}
         overall = "blocked" if "blocked" in statuses else ("manual_review" if "manual_review" in statuses else "passed")
         return self._envelope({"status": overall, "shots": shots})
