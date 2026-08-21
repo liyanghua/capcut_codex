@@ -1,6 +1,6 @@
 # G-B 测量、质量快照与操作型审核工作台设计
 
-> 状态：完整设计已确认，等待实施计划
+> 状态：P0b 本机审核工作台已实现；G-B 真实回归、owner 复核和人工视口验收仍待执行
 >
 > 日期：2026-08-17
 >
@@ -25,6 +25,8 @@
 - 提供本机单运营、可直接审批和受控修改的审核工作台；
 - 用新的监督 cold/hot 运行采集可信审核时间；
 - 形成 owner 可明确批准或拒绝的 G-B 复核包。
+
+P0b 的业务工作台投影、关键产物抽屉、增量刷新和 hash-bound 修改预览已实现；创意质量升级在 [08-19 设计](2026-08-19-reference-remix-creative-quality-upgrade-design.md) 之上增加策略/脚本候选与分镜诊断，不新增审核事件类型。审核计时继续采用本文件定义的 `review.active_start`、`review.active_stop`、`review.heartbeat`、`review.pause`、`review.evidence_interaction` 与 `review.decision_accepted` 区间模型。
 
 系统不得自行批准 G-B。普通 V2 production、共享生产缓存和归档继续保持锁定，直到 G-B owner 批准且后续监督运营试用通过。
 

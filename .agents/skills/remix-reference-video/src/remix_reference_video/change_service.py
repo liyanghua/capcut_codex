@@ -1073,6 +1073,7 @@ class WorkbenchOrchestrator:
             doubao_client_script=config.doubao_client_script,
             python_executable=config.python_executable,
             archive_root=config.archive_root,
+            script_candidate_provider=config.script_candidate_provider,
         )
         return ProductionRunner.from_registry(task, registry)
 

@@ -146,6 +146,16 @@ Gate 3 必须同时通过素材选择和证据闭环；Gate 4 必须先生成前
 - 两份报告都是机器产物：`lifecycle_status` 只允许 `ready|stale`，不允许携带 Gate approval 字段；schema 注册在 `schemas/v2-alpha.registry.schema.json`。
 - V2 文案修改请求必须携带 `edit_intent=bridge|rewrite`；`merge` 只属于结构修改并返回 Gate 2。V1 任务缺失 intent 由兼容层归一为 `rewrite`。
 
+## 创意质量升级（Creative V2）
+
+新建 creative run 在 Stage 0 冻结快照中明确写入 `creative_contract_version="creative_contract_v1"`，它才会选择 `creative_dag()`；没有该标记的历史 run 继续按 frozen legacy/hardened DAG 运行。creative DAG 不解除 `gb-pair` 隔离、Gate 审批或普通 V2 production lock。
+
+- Gate 1 审核 `decomposition_bundle.json` 并选择一个 `selected_decomposition_id`；Gate 2 原子绑定 `creative_objective.json`、`remix_strategy_candidates.json`、内容基线、变更包和 coverage precheck；Gate 4 生成前只允许批准 `script_candidate_validation_report.json` 标记为 `passed` 的脚本候选。
+- 工作台的阶段卡展示策略、候选版本、关键产物血缘、质量测量和结构化修改影响。`script_candidate_select` 只走 ChangeService 预览与二次确认，会使 Gate 4 及下游 stale，不会直接改写已批准成片。
+- `validate-shot-quality` 缺失 required action 或代理证据时阻断；主观一致性/高光问题保持 `manual_review`。`build-final-content-diagnostic` 将前三秒、目标覆盖和确定性问题带入 Gate 5，不冒充 Track C L1 分数。
+- 脚本候选 provider 必须显式传入。当前仅注册可复现的 `stub`，用于测试和契约验证；未接入受控生产 provider 前，creative run 会在候选生成环节停止，而不会静默回退为伪生成。
+- `baseline_v0` 固定为 `gb-cold-1786890259`。用 `CreativeBaselineComparison` 创建 v0/v1 比较约束后，由 owner 按 [盲评模板](../../../docs/superpowers/blind-eval-template.md) 完成两份独立评价；只有真实 `baseline_v1` 通过全部 Gate 后才可计算比较结论。P3b 局部 AI 增强仍需先有 P3a 的重复、可修复问题监督证据。
+
 ## 本机审核工作台
 
 P0b 提供 localhost-only 七 Gate 审核台。它只服务显式登记的冻结 `gb-pair` cold/hot run，不会按目录名猜测任务，也不会解除普通 V2 production、共享缓存、归档或发布锁。

@@ -13,6 +13,10 @@ from remix_reference_video.storage import atomic_write_json
 
 
 class CreativeNodeTests(unittest.TestCase):
+    def test_script_generator_requires_an_explicit_provider_configuration(self) -> None:
+        with self.assertRaisesRegex(ValueError, "provider configuration"):
+            ScriptCandidateGenerator()
+
     def test_decomposition_emits_three_strategy_candidates_with_reference_ids(self) -> None:
         result = DecompositionAdapter().build({"shots": [{"shot_id": "shot-1", "start_seconds": 0, "end_seconds": 1, "semantic": "hook"}]}, requested_strategies=None)
         self.assertEqual(len(result["candidates"]), 1)

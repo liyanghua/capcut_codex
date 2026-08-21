@@ -2,7 +2,7 @@
 
 ## 1. 文档状态
 
-- 状态：设计基线，待用户书面复核
+- 状态：实现基线已落地；真实 creative `baseline_v1`、owner 盲评和 P3b provider 接入待后续监督运行
 - 日期：2026-08-19
 - 适用对象：`remix-reference-video` V2 新任务、审核工作台和后续监督运营试用
 - 前置设计：[业务视频工作台重构设计](2026-08-18-business-video-workbench-design.md)
@@ -10,6 +10,8 @@
 - 评价口径：[视频质量、线上反馈与生成过程业务评价体系](2026-08-16-video-quality-online-feedback-generation-process-design.md)
 
 本文定义参考视频复刻从“可审计地生成成片”升级为“以创作目标牵引、可比较策略、可评价质量、可局部重做”的下一阶段能力。它不引入开放式 Agent 对话，不改变 `pipeline_state.json` 的审批权威，不解除普通 V2 production lock，也不允许生成模型绕过声明、素材证据或现有 Gate。
+
+截至 2026-08-21，creative DAG、Gate 1/2/4 哈希绑定、关键产物工作台投影、候选脚本校验、分镜/成片诊断、北极星测量和 `baseline_v0/v1` 比较工具均已实现并由自动化测试覆盖。实际创作生成器当前只注册确定性 `stub`，真实 provider 必须由受信 runtime config 显式选择，尚未接入前不得把 stub 输出当作生产级 AI 文案；P3b 局部 AI 增强仍须先积累 P3a 监督样本，真实 `baseline_v1` 与 owner 盲评也尚未执行。
 
 ## 2. 当前任务复盘与事实边界
 

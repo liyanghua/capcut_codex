@@ -25,6 +25,8 @@
 
 **Sequencing:** P0a-contracts → P0a-docs → P0b → P1 → P2 → P3a → P3b → P4 baseline comparison → P5 outline. P0b does not depend on generative models and may proceed in parallel with P1 contract work. P3b may only start after P3a supervision evidence shows a repeatable, fixable shot problem class.
 
+**Implementation status (2026-08-21):** Tasks 1–10 and Task 12 have implementation commits and automated coverage. Task 9 now requires an explicit script-candidate provider configuration; only the deterministic test `stub` is registered, so a real provider is an explicit remaining integration rather than a silent fallback. Task 11 is deliberately deferred because no P3a supervision sample has established a repeatable, fixable problem class. Task 13 requires a new isolated creative `baseline_v1` run and owner blind evaluation. Task 14's document/code synchronization is complete after the verification steps below; its G-B regression and manual viewport acceptance remain real-world work, not checklist substitutions.
+
 ---
 
 ## Phase 0a: Contract Foundation
@@ -96,7 +98,7 @@
 
   In `gb_frozen_case.py`, when a new run is frozen for the creative upgrade, the Stage 0 freeze helper writes `creative_contract_version="creative_contract_v1"` into `g_b_frozen_input_snapshot.json`; the marker participates in the snapshot SHA-256. `gb-pair --creative-contract v1` only verifies that the immutable frozen snapshot already carries the marker and must never add or rewrite it. Absence of the flag keeps the hardened qualification path.
 
-- [ ] **Step 5: Route invalidation through the selected DAG**
+- [x] **Step 5: Route invalidation through the selected DAG**
 
   Replace remaining direct `default_dag()` consumers in `change_service.py`/`native_registry.py`/`critical_path.py` with the task-selected DAG so impact previews and critical-path computation follow whichever DAG the task actually runs.
 
@@ -104,7 +106,7 @@
 
   Expected: PASS.
 
-- [ ] **Step 7: Commit the DAG slice**
+- [x] **Step 7: Commit the DAG slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/orchestrator.py .agents/skills/remix-reference-video/src/remix_reference_video/gb_frozen_case.py .agents/skills/remix-reference-video/src/remix_reference_video/runner.py .agents/skills/remix-reference-video/src/remix_reference_video/native_registry.py .agents/skills/remix-reference-video/src/remix_reference_video/change_service.py .agents/skills/remix-reference-video/src/remix_reference_video/critical_path.py .agents/skills/remix-reference-video/tests/test_dag_selection.py && git commit -m "feat: add creative contract marker and DAG selection"`
 
@@ -115,27 +117,27 @@
 - Modify: `.agents/skills/remix-reference-video/src/remix_reference_video/native_completion.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_gate_package_bindings.py`
 
-- [ ] **Step 1: Write failing binding tests**
+- [x] **Step 1: Write failing binding tests**
 
   Assert: Gate 1 decision `strategy` carries exactly one `selected_decomposition_id` that exists in the bound `decomposition_bundle.json` (reject unknown/multiple IDs); Gate 2 decision `strategy` carries exactly one `selected_remix_strategy_id` present in `remix_strategy_candidates.json`; Gate 4 pre-generation decision `strategy` carries `selected_script_candidate_id` whose candidate is `passed` in `script_candidate_validation_report.json`, plus the existing `tts_settings` speed check. Reject approval when any bound hash is stale.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because the strategies are not validated.
 
-- [ ] **Step 3: Implement strategy validation in ApprovalService**
+- [x] **Step 3: Implement strategy validation in ApprovalService**
 
   Add per-Gate strategy validators gated on the creative contract marker (hardened/legacy runs keep today's strategy shapes). Verify the selected ID against the bound candidate artifact and its package hash before writing the decision. Keep the Gate 4 pre-generation approved-script promotion transaction unchanged otherwise.
 
-- [ ] **Step 4: Extend package builders**
+- [x] **Step 4: Extend package builders**
 
   In `native_completion.py`, extend `build-gate1-package`, `lint-gate2-package`, and `build-gate4-pre-package` to include the new bound artifacts in `input_hashes` and the machine-proposed default selection (P1/P2 fill the actual producers; P0a keeps them absent and skips binding for non-creative runs).
 
-- [ ] **Step 5: Re-run focused tests**
+- [x] **Step 5: Re-run focused tests**
 
   Expected: PASS.
 
-- [ ] **Step 6: Commit the binding slice**
+- [x] **Step 6: Commit the binding slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/approvals.py .agents/skills/remix-reference-video/src/remix_reference_video/native_completion.py .agents/skills/remix-reference-video/tests/test_gate_package_bindings.py && git commit -m "feat: bind decomposition, remix strategy and script candidate to Gate packages"`
 
@@ -159,7 +161,7 @@
 
   Add the schema to `_SCHEMA_NAMES`, the validator branch, and `_IMPACTS` entry. Scope maps to B0 `script_settings`; server re-validates the candidate's `passed` status from `script_candidate_validation_report.json` and recomputes the preview hash.
 
-- [ ] **Step 4: Expose in the Gate 4 pre-generation UI**
+- [x] **Step 4: Expose in the Gate 4 pre-generation UI**
 
   Add a candidate-switch action in the review sheet Gate 4 pre-generation view that opens the standard change preview; no direct artifact writes.
 
@@ -167,7 +169,7 @@
 
   Expected: PASS.
 
-- [ ] **Step 6: Commit the change slice**
+- [x] **Step 6: Commit the change slice**
 
   Run: `git add .agents/skills/remix-reference-video/schemas/changes/script-candidate-select.schema.json .agents/skills/remix-reference-video/src/remix_reference_video/change_service.py .agents/skills/remix-reference-video/src/remix_reference_video/static/review_workbench.js .agents/skills/remix-reference-video/tests/test_change_service.py && git commit -m "feat: add script candidate selection change type"`
 
@@ -193,7 +195,7 @@
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit the measurement slice**
+- [x] **Step 5: Commit the measurement slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/stage_north_star.py .agents/skills/remix-reference-video/tests/test_stage_north_star.py && git commit -m "feat: add stage north-star measurement contract"`
 
@@ -211,29 +213,29 @@
 - Test: `.agents/skills/remix-reference-video/tests/test_workspace_view.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_workbench_client.py`
 
-- [ ] **Step 1: Write failing projection tests**
+- [x] **Step 1: Write failing projection tests**
 
   Assert `stage_artifacts[]` is organized by the five business stages; `artifact_versions[]` exposes candidate-vs-approved versions with strategy IDs and diff summaries only when candidate artifacts exist; `lineage_edges[]` chains objective → strategy → script → shot → material → timeline → final video; `evaluation_summary` carries north-star/constraint/evidence-source/`not_measured` reasons; `change_impact` mirrors ChangeService previews. Missing artifacts must yield explicit "旧契约未生成" states, never fabricated data.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because the projection fields do not exist.
 
-- [ ] **Step 3: Extend the workspace schema and builder**
+- [x] **Step 3: Extend the workspace schema and builder**
 
   Add the five typed projection sections to the workspace schema; build them deterministically from `pipeline_state.json`, review packages, and registered artifacts, bound to `state_revision` and package revision.
 
-- [ ] **Step 4: Implement the stage key-artifacts card and detail drawer**
+- [x] **Step 4: Implement the stage key-artifacts card and detail drawer**
 
   Right-rail stage cards gain a "关键产物" region; the drawer compares candidates, shows evidence, locates the central preview/timeline, and offers structured change entry. Raw JSON/paths/hashes stay in the diagnostics foldout. No placeholder capabilities.
 
-- [ ] **Step 5: Re-run focused and client tests**
+- [x] **Step 5: Re-run focused and client tests**
 
   Run: `PYTHONPATH=src python -m unittest tests.test_workspace_view -v && node .agents/skills/remix-reference-video/tests/client_workbench_harness.js`
 
   Expected: PASS.
 
-- [ ] **Step 6: Commit the workbench slice**
+- [x] **Step 6: Commit the workbench slice**
 
   Run: `git add .agents/skills/remix-reference-video/schemas/workbench-workspace-view.schema.json .agents/skills/remix-reference-video/src/remix_reference_video/workspace_view.py .agents/skills/remix-reference-video/src/remix_reference_video/static .agents/skills/remix-reference-video/tests/test_workspace_view.py .agents/skills/remix-reference-video/tests/test_workbench_client.py && git commit -m "feat: project key artifacts, versions and lineage into workbench"`
 
@@ -252,31 +254,31 @@
 - Modify: `.agents/skills/remix-reference-video/src/remix_reference_video/change_service.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_decomposition.py`
 
-- [ ] **Step 1: Write failing decomposition tests**
+- [x] **Step 1: Write failing decomposition tests**
 
   Cover the four versioned strategies (`structure_semantic_v1`, `rhythm_visual_v1`, `evidence_action_v1`, `hybrid_commerce_v1`); 1–3 candidates with default `hybrid_commerce_v1`; candidate references to `recipe.json` physical shot IDs without redefining boundaries; semantic segments, hooks, rhythm peaks, suspect cuts, low-confidence items, and structured inter-candidate diffs; low-confidence threshold read from `decomposition_policy_v1`.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because no decomposition adapter exists.
 
-- [ ] **Step 3: Restructure the Gate 1 DAG nodes**
+- [x] **Step 3: Restructure the Gate 1 DAG nodes**
 
   In `creative_dag()`: `split-reference` loses its `stop_gate` (recipe + physical facts only); new `build-decomposition-candidates` depends on `split-reference`; new `build-gate1-package` depends on it and carries `stop_gate=gate1`. The Gate 1 package binds `recipe.json` + `decomposition_bundle.json` + machine-proposed `selected_decomposition_id`.
 
-- [ ] **Step 4: Implement the four decomposition strategies**
+- [x] **Step 4: Implement the four decomposition strategies**
 
   Each strategy is a deterministic adapter with its own implementation version, input hashes, and candidate output. Keep physical facts in `recipe.json`; never mutate it.
 
-- [ ] **Step 5: Extend invalidation closure**
+- [x] **Step 5: Extend invalidation closure**
 
   Decomposition-switch changes stale Gate 1 and all downstream; recipe changes stale everything downstream; record both in `change_service.py` impact rules for creative runs.
 
-- [ ] **Step 6: Re-run focused tests**
+- [x] **Step 6: Re-run focused tests**
 
   Expected: PASS.
 
-- [ ] **Step 7: Commit the decomposition slice**
+- [x] **Step 7: Commit the decomposition slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/adapters/decomposition.py .agents/skills/remix-reference-video/src/remix_reference_video/orchestrator.py .agents/skills/remix-reference-video/src/remix_reference_video/native_registry.py .agents/skills/remix-reference-video/src/remix_reference_video/native_preparation.py .agents/skills/remix-reference-video/src/remix_reference_video/native_completion.py .agents/skills/remix-reference-video/src/remix_reference_video/change_service.py .agents/skills/remix-reference-video/tests/test_decomposition.py && git commit -m "feat: add multi-strategy decomposition with Gate 1 selection"`
 
@@ -314,7 +316,7 @@
 
   Expected: PASS.
 
-- [ ] **Step 7: Commit the Gate 2 slice**
+- [x] **Step 7: Commit the Gate 2 slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/adapters/blueprint.py .agents/skills/remix-reference-video/src/remix_reference_video/adapters/mutation.py .agents/skills/remix-reference-video/src/remix_reference_video/native_preparation.py .agents/skills/remix-reference-video/src/remix_reference_video/change_service.py .agents/skills/remix-reference-video/tests/test_creative_objective.py .agents/skills/remix-reference-video/tests/test_remix_strategies.py && git commit -m "feat: add creative objective and remix strategy candidates at Gate 2"`
 
@@ -332,35 +334,35 @@
 - Modify: `.agents/skills/remix-reference-video/src/remix_reference_video/native_completion.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_script_candidates.py`
 
-- [ ] **Step 1: Write failing candidate-generation tests**
+- [x] **Step 1: Write failing candidate-generation tests**
 
   Cover: generation only runs when `narrative_coherence_report.status != blocked`; 2–3 candidates with creative hypotheses ("问题解决"/"演示证明"/"场景收益"); per-candidate fields from design §8.2 including `objective_id`, `narrative_role`, `required_actions`, claim/evidence refs, expected visuals, duration estimates, continuity, first-3-seconds/product/proof/result/CTA completion, risks, and provider/model/prompt-version/seed/input-hash records; provider registry allows a deterministic `stub` provider for tests and requires explicit production provider config (no silent default).
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because no candidate generator exists.
 
-- [ ] **Step 3: Insert the creative DAG nodes**
+- [x] **Step 3: Insert the creative DAG nodes**
 
   `creative_dag()`: `summarize-gate3 → build-narrative-coherence → generate-script-candidates → validate-script-candidates → select-script-candidate → build-production-script → voice-preflight → build-gate4-pre-package`. `materialize-approved-broad → validate-visual-layout` stays parallel; `voice-preflight` keeps both upstream dependencies.
 
-- [ ] **Step 4: Implement the generator with governance**
+- [x] **Step 4: Implement the generator with governance**
 
   `ScriptCandidateGenerator` protocol: fixed provider/model/prompt-template-version/seed/params; candidates are hash-immutable once emitted; failures keep upstream artifacts and return recoverable states; re-running reproduces inputs/configuration/audit chain (byte-identical text only promised for the stub provider).
 
-- [ ] **Step 5: Implement `validate-script-candidates`**
+- [x] **Step 5: Implement `validate-script-candidates`**
 
   Per-candidate re-execution of design §8.3 gates (100% claim/evidence closure, no forbidden claims, hook function, product-appearance target with approved exception, no ≥2 consecutive pure-claim segments, required roles present, continuity known, budget fit, all `required` objectives covered). Failed candidates stay in the list with elimination reasons but are excluded from selection.
 
-- [ ] **Step 6: Implement `select-script-candidate`**
+- [x] **Step 6: Implement `select-script-candidate`**
 
   `script_candidate_rank_v1`: required-goal coverage desc → weighted coverage desc → minimal budget margin desc → `script_candidate_id` lexicographic tiebreak. Re-materializes `production_script_candidate.json` (with per-line `objective_id`/`script_line_id`/`narrative_role`/`required_actions`/`evidence_row_ref`/`visual_intent`) and `voice_preflight.json` on every selection.
 
-- [ ] **Step 7: Re-run focused tests**
+- [x] **Step 7: Re-run focused tests**
 
   Expected: PASS.
 
-- [ ] **Step 8: Commit the script-layer slice**
+- [x] **Step 8: Commit the script-layer slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/adapters/script_candidates.py .agents/skills/remix-reference-video/src/remix_reference_video/script_candidate_generator.py .agents/skills/remix-reference-video/src/remix_reference_video/orchestrator.py .agents/skills/remix-reference-video/src/remix_reference_video/native_registry.py .agents/skills/remix-reference-video/src/remix_reference_video/native_completion.py .agents/skills/remix-reference-video/tests/test_script_candidates.py && git commit -m "feat: add validated generative script candidates before Gate 4"`
 
@@ -380,31 +382,31 @@
 - Test: `.agents/skills/remix-reference-video/tests/test_shot_quality.py`
 - Test: `.agents/skills/remix-reference-video/tests/test_final_diagnostic.py`
 
-- [ ] **Step 1: Write failing diagnostic tests**
+- [x] **Step 1: Write failing diagnostic tests**
 
   Assert `validate-shot-quality` runs after proxy generation and before boundary validation/final render; per-shot checks from design §9.1 with deterministic `blocked` (identity error, missing evidence/action, cropped text, timeline overflow, incomplete required action) vs `manual_review` (subjective continuity/highlight/aesthetic); `manual_review` items must be carried into Gate 5 and never shown as `passed`; high-light candidates record target/expected role/time range/issue/suggested actions.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because no diagnostic adapters exist.
 
-- [ ] **Step 3: Insert nodes and implement `validate-shot-quality`**
+- [x] **Step 3: Insert nodes and implement `validate-shot-quality`**
 
   `creative_dag()`: `render-proxy → validate-shot-quality → validate-proxy-boundaries → render-final → build-final-content-diagnostic → build-gate5-package`. Implement the shot rubric reading approved script, material manifest, exact timeline, proxy frames, narrative and layout reports.
 
-- [ ] **Step 4: Implement `build-final-content-diagnostic`**
+- [x] **Step 4: Implement `build-final-content-diagnostic`**
 
   Aggregate shot results into `final_content_diagnostic_report.json` (first-3-seconds, script-visual coherence, product/scene consistency, persuasion/evidence, rhythm/highlights, objective coverage, L0 citations). `blocked` only from deterministic derivable problems; subjective dimensions stay `manual_review`; lifecycle `ready|stale`. Gate 5 package displays items and sources without inventing Track C L1 claims.
 
-- [ ] **Step 5: Extend invalidation and recovery**
+- [x] **Step 5: Extend invalidation and recovery**
 
   Script edits stale Gate 4 pre and downstream; material/range edits stale both Gate 3 sub-states and downstream; exact-cut adjustments inside approved broad ranges stale timeline/proxy/reports/downstream; diagnostics failures return `earliest_recovery_gate` (Gate 2 / Gate 3 sub-state / Gate 4) per design §13.
 
-- [ ] **Step 6: Re-run focused tests**
+- [x] **Step 6: Re-run focused tests**
 
   Expected: PASS.
 
-- [ ] **Step 7: Commit the diagnostics slice**
+- [x] **Step 7: Commit the diagnostics slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/adapters/shot_quality.py .agents/skills/remix-reference-video/src/remix_reference_video/adapters/final_diagnostic.py .agents/skills/remix-reference-video/src/remix_reference_video/orchestrator.py .agents/skills/remix-reference-video/src/remix_reference_video/native_registry.py .agents/skills/remix-reference-video/src/remix_reference_video/native_completion.py .agents/skills/remix-reference-video/src/remix_reference_video/change_service.py .agents/skills/remix-reference-video/tests/test_shot_quality.py .agents/skills/remix-reference-video/tests/test_final_diagnostic.py && git commit -m "feat: add shot-level and final content diagnostics"`
 
@@ -454,23 +456,23 @@
 - Create: `docs/superpowers/blind-eval-template.md`
 - Test: `.agents/skills/remix-reference-video/tests/test_creative_baseline.py`
 
-- [ ] **Step 1: Write failing comparison tests**
+- [x] **Step 1: Write failing comparison tests**
 
   Assert `baseline_v0` registration binds cold run `gb-cold-1786890259` of `work/2026-08-16-tablemat-mix-v2/` with its `g_b_frozen_input_snapshot` SHA-256 and `video_version_id`; the comparison fixes reference/Brief/asset-pool hashes, claim scope, audience, platform, voice settings and output specs; allowed deltas are exactly the design §15 creative/making choices; AI enhancement is forced off for the first comparison; each side gets its own `evaluation_context_id` linked by one `comparison_id`; pass requires both L0 pass, all v1 required objectives and claim evidence pass, v1 first-3-seconds and script coherence strictly above v0, visual consistency/highlights/viewing experience not below v0, and no unapproved facts/material/enhancements.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
   Expected: FAIL because no comparison module exists.
 
-- [ ] **Step 3: Implement `CreativeBaselineComparison`**
+- [x] **Step 3: Implement `CreativeBaselineComparison`**
 
   Register baseline_v0, compute comparison inputs/hashes, freeze the blind-eval rubric (`low|ordinary|high` with evidence timestamps), and evaluate the §15 pass criteria. Effective decision time and rework rounds are recorded but observational only. v0 scores are direct human observations of the final video (v0 has no narrative/first-3-seconds machine reports); record that asymmetry in the comparison.
 
-- [ ] **Step 4: Re-run focused tests**
+- [x] **Step 4: Re-run focused tests**
 
   Expected: PASS.
 
-- [ ] **Step 5: Commit the comparison slice**
+- [x] **Step 5: Commit the comparison slice**
 
   Run: `git add .agents/skills/remix-reference-video/src/remix_reference_video/creative_baseline.py docs/superpowers/blind-eval-template.md .agents/skills/remix-reference-video/tests/test_creative_baseline.py && git commit -m "feat: add baseline v0/v1 creative comparison harness"`
 
@@ -506,23 +508,23 @@
 - Modify: `AGENTS.md`
 - Modify: `.agents/skills/remix-reference-video/README.md`
 
-- [ ] **Step 1: Amend the 08-19 design per review rulings**
+- [x] **Step 1: Amend the 08-19 design per review rulings**
 
   Rewrite §11.2 to reference the implemented interval-model events and drop the tick-based event names; replace the §12 compatibility wording with the single `creative_contract_version` marker and the three-way DAG matrix; state the G-B scope ruling (hardened DAG, no P1–P3); document coverage-precheck display-completeness binding; add the product-appearance exception field and the `visual_intent` producer (Blueprint); note the v0 blind-eval evidence asymmetry.
 
-- [ ] **Step 2: Update the 08-17 workbench design status**
+- [x] **Step 2: Update the 08-17 workbench design status**
 
   Mark its P0b as implemented, cross-reference the 08-18/08-19 docs, and reconcile its event contract wording with the implemented interval model (no new events introduced by the creative design).
 
-- [ ] **Step 3: Sync AGENTS.md**
+- [x] **Step 3: Sync AGENTS.md**
 
   Record `tablemat-mix-v2` as the latest completed pair and its `baseline_v0` role; describe the creative contract marker, the three DAG generations, the new core artifacts, and that supervised G-B keeps the hardened DAG until owner G-B review passes.
 
-- [ ] **Step 4: Update the Skill README**
+- [x] **Step 4: Update the Skill README**
 
   Document the new task-start path for creative runs (`--creative-contract v1`), the new artifacts and Gate bindings, the `script_candidate_select` change type, and the enhancement re-review path.
 
-- [ ] **Step 5: Run the full suite and static checks**
+- [x] **Step 5: Run the full suite and static checks**
 
   Run: `PYTHONPATH=src python -m unittest discover -s tests -q && node --check src/remix_reference_video/static/review_workbench.js && git diff --check && python -m compileall -q src`
 
@@ -536,7 +538,7 @@
 
   1440px and 390px walkthrough: stage key-artifact cards, candidate comparison drawer, lineage, evaluation summary, Gate 1 strategy selection, Gate 2 objective/strategy review, Gate 4 candidate switch preview, Gate 5 diagnostic carry-over, and the "旧契约未生成" state on a legacy task. Record evidence and open issues.
 
-- [ ] **Step 8: Commit the documentation slice**
+- [x] **Step 8: Commit the documentation slice**
 
   Run: `git add docs AGENTS.md .agents/skills/remix-reference-video/README.md && git commit -m "docs: sync creative quality upgrade design and governance"`
 

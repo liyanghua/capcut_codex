@@ -36,6 +36,7 @@ class ProductionRuntimeConfig:
     doubao_client_script: Path
     python_executable: str = sys.executable
     archive_root: Path | None = None
+    script_candidate_provider: str | None = None
 
     @classmethod
     def from_file(cls, path: Path) -> "ProductionRuntimeConfig":
@@ -86,7 +87,15 @@ class ProductionRuntimeConfig:
             archive_root = (config_path.parent / archive).resolve(strict=False)
             if config_path.parent not in archive_root.parents and archive_root != config_path.parent:
                 raise ValueError("archive_root must remain inside the task directory")
-        return cls(**values, python_executable=python_executable, archive_root=archive_root)
+        provider = raw.get("script_candidate_provider")
+        if provider is not None and (not isinstance(provider, str) or not provider.strip()):
+            raise ValueError("script_candidate_provider must be a nonempty string")
+        return cls(
+            **values,
+            python_executable=python_executable,
+            archive_root=archive_root,
+            script_candidate_provider=provider,
+        )
 
 
 def register_real_completion_adapters(
@@ -96,6 +105,7 @@ def register_real_completion_adapters(
     doubao_client_script: Path,
     python_executable: str = sys.executable,
     archive_root: Path | None = None,
+    script_candidate_provider: str | None = None,
 ) -> NativeAdapterRegistry:
     root = registry.task_root
     return register_completion_adapters(
@@ -111,6 +121,7 @@ def register_real_completion_adapters(
         final_renderer=FFmpegRenderer(),
         media_probe=FFmpegMediaProbe(),
         archive_root=archive_root,
+        script_candidate_provider=script_candidate_provider,
     )
 
 
@@ -125,6 +136,7 @@ def build_real_registry(
     doubao_client_script: Path,
     python_executable: str = sys.executable,
     archive_root: Path | None = None,
+    script_candidate_provider: str | None = None,
 ) -> NativeAdapterRegistry:
     root = Path(task_root).resolve(strict=True)
     registry = NativeAdapterRegistry(root)
@@ -149,6 +161,7 @@ def build_real_registry(
         doubao_client_script=doubao_client_script,
         python_executable=python_executable,
         archive_root=archive_root,
+        script_candidate_provider=script_candidate_provider,
     )
     return registry
 

@@ -12,6 +12,7 @@
 - Native Runner 已接入正式 CLI 的显式 `production_runtime_config.json`；普通 `run/stage/resume` 仍受 `track_b=locked_until_g_a` 保护。唯一隔离例外 `gb-pair` 已在 `work/2026-08-16-gb-pair-real-2/` 完成真实 cold/hot 配对：两侧均独立通过 Gate 1–5，真实 FFmpeg/TTS 成片、代理检查和最终校验通过；Gate 5 后只复制声明 cache，hot 保留自己的增量索引，未复用审批。配对当前为 `measured_pending_review`，G-B 仍需 V1 可比性和 owner 阈值复核，普通 V2 生产与一线发布继续锁定。
 - 主干 Skill 入口为 `.agents/skills/remix-reference-video/README.md`。历史 V1 任务按创建时契约续跑；新 V2 case 先完成 Stage 0，冻结 `reference-*.mp4`、`project_brief.json`、`asset_profiles.json` 和 `g_b_frozen_input_snapshot.json`，再使用隔离 `gb-pair`。缺少冻结事实时必须暂停补齐，不得从文件名或空白信息推断产品声明。
 - 工作台新项目入口为 `/workbench` → `/workbench/projects/new`。本机写操作使用 loopback、同源和一次性 nonce 保护；macOS 原生选择器只接受固定的参考视频/素材目录模式，并保留手动绝对路径备用。Stage 0 不生成媒体；freeze 只建立 `frozen-input/`，启动 cold 后才创建和登记 run。creative Gate 2 后缺业务素材证据时暂停在 `collect-material-evidence`，补证据不是新 Gate，也不能出现通过/驳回控件。
+- 创意质量升级已实现为显式 `creative_contract_version=creative_contract_v1` 标记与第三条 `creative_dag()`；无标记旧 run 仍按 legacy/hardened DAG 续跑。creative run 的 Gate 1 选择拆解候选、Gate 2 原子绑定创作目标与复刻策略、Gate 4 选择已校验的脚本候选，并生成分镜/成片诊断和工作台关键产物投影。`tablemat-mix-v2` cold `gb-cold-1786890259` 只作为 `baseline_v0`，不得回写或复用审批；`baseline_v1` 必须用同一冻结输入新建并逐 Gate 审核。当前脚本候选仅有确定性 stub provider，真实 provider 需由可信 runtime config 显式配置；AI 增强 provider 在 P3a 监督样本前仍不得启用。监督 G-B 一律使用 hardened DAG，普通 V2 lock 不变。
 
 ## 目标
 

@@ -529,6 +529,7 @@ def _production_runner(
                 doubao_client_script=runtime_config.doubao_client_script,
                 python_executable=runtime_config.python_executable,
                 archive_root=runtime_config.archive_root,
+                script_candidate_provider=runtime_config.script_candidate_provider,
             ),
         )
     runtime_values = (

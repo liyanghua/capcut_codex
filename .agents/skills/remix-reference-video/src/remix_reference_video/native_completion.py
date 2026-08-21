@@ -61,6 +61,7 @@ def register_completion_adapters(
     final_renderer: Callable[..., Mapping[str, object]],
     media_probe: Callable[[Path], Mapping[str, object]],
     archive_root: Path | None = None,
+    script_candidate_provider: str | None = None,
 ) -> NativeAdapterRegistry:
     """Register real Gate 3/B4/B5 calls on an isolated native registry."""
 
@@ -139,7 +140,8 @@ def register_completion_adapters(
             implementation_version="script-candidates-native-v1",
             required_inputs=(evidence, narrative_report, baseline, creative_objective, fragment_plan), declared_outputs=(script_candidates,),
             execute_fn=lambda: _generate_script_candidates(
-                evidence, narrative_report, baseline, creative_objective, fragment_plan
+                evidence, narrative_report, baseline, creative_objective, fragment_plan,
+                script_candidate_provider,
             ),
         ))
         registry.register(NativeStageAdapter(
@@ -594,6 +596,7 @@ def _generate_script_candidates(
     baseline: Path,
     objective: Path,
     fragment_plan: Path,
+    provider: str | None,
 ) -> Mapping[str, object]:
     evidence_value = read_json_object(evidence)
     narrative_value = read_json_object(narrative)
@@ -629,7 +632,7 @@ def _generate_script_candidates(
                 "evidence_row_ref": str(row.get("evidence_row_ref") or f"evidence:{fragment_id}"),
                 "visual_duration_budget_seconds": budget,
             })
-    return ScriptCandidateGenerator(provider="stub", seed=0).generate({
+    return ScriptCandidateGenerator(provider=provider, seed=0).generate({
         "objective": read_json_object(objective),
         "evidence": {"fragments": fragments},
     })

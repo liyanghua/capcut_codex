@@ -8,7 +8,9 @@ from collections.abc import Mapping
 
 
 class ScriptCandidateGenerator:
-    def __init__(self, *, provider: str = "stub", seed: int = 0, model: str = "stub-v1") -> None:
+    def __init__(self, *, provider: str | None = None, seed: int = 0, model: str = "stub-v1") -> None:
+        if not isinstance(provider, str) or not provider.strip():
+            raise ValueError("script candidate provider configuration is required")
         if provider != "stub":
             raise ValueError("only the deterministic stub provider is enabled in this phase")
         self.provider, self.seed, self.model = provider, seed, model
